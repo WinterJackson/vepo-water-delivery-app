@@ -1,0 +1,57 @@
+from fastapi import HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload
+from uuid import UUID
+from sqlalchemy.future import select
+from models.product_model import Product
+from schemas.product_schemas import ProductFull,BaseProduct
+
+async def get_product_details(session : AsyncSession, id : UUID) -> ProductFull:
+  query = select(Product).options(selectinload(Product.vendor)).where(Product.id == id)
+  result = await session.execute(query)
+  product = result.unique().scalar_one_or_none()
+  if not product:
+    raise HTTPException(status_code=404, detail="Product by this id does not exist")
+  return product
+
+
+async def get_product_for_cart(session : AsyncSession, id : UUID) -> BaseProduct:
+  query = select(Product).where(Product.id == id)
+  result = await session.execute(query)
+  product = result.unique().scalar_one_or_none()
+  if not product:
+    raise HTTPException(status_code=404, detail="Product by this id does not exist")
+  return product
+
+async def fetch_products_with_offer(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[BaseProduct]:
+  query = select(Product).where(Product.discount > 0).order_by(Product.discount.desc()).offset(offset).limit(limit)
+  result = await session.execute(query)
+  products = result.unique().scalars().all()
+  if not products :
+    return []
+  return products 
+
+async def fetch_paginated_products(session: AsyncSession, page: int) ->  list[BaseProduct]:
+  offset = (page - 1 ) * 16
+  query = select(Product).order_by(Product.created_at.desc()).offset(offset).limit(16)
+  result = await session.execute(query)
+  products = result.scalars().all()
+  return products
+
+
+async def fetch_products_by_category(session: AsyncSession, category: str, limit: int = 20, offset: int = 0) -> dict:
+  """Fetch products filtered by Kenya market category with pagination."""
+  base_query = select(Product).where(Product.category == category, Product.is_available == True)
+  
+  # Get total count
+  count_query = select(func.count()).select_from(base_query.subquery())
+  count_result = await session.execute(count_query)
+  total = count_result.scalar() or 0
+  
+  # Get paginated results
+  query = base_query.order_by(Product.created_at.desc()).offset(offset).limit(limit)
+  result = await session.execute(query)
+  products = result.scalars().all()
+  
+  return {"data": products, "total": total, "limit": limit, "offset": offset}

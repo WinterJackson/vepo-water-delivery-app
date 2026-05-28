@@ -1,0 +1,266 @@
+import ApiRoutes from "@/API/routes/ApiRoutes";
+import { useApiClient } from "@/API/useApiClient";
+import Context from "@/context/context";
+import { UIThemeContext } from "@/context/ThemeContext";
+import { useAuth } from "@clerk/clerk-expo";
+import { useUserDetails } from "@/hooks/queries/useUser";
+import { FlashList } from "@shopify/flash-list";
+import { BRAND } from '@/constants/brandColors';
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
+import React, { useContext, useState } from "react";
+import {
+	useWindowDimensions,
+	View,
+	Text
+} from "react-native";
+import { useAddToCart } from "@/hooks/queries/useCart";
+import { estimateDeliveryTime } from "@/utils/distance";
+import { Skeleton, SkeletonText, SkeletonAvatar } from "../ui/Skeleton";
+import { PressableScale } from "@/components/ui/PressableScale";
+import { Ionicons } from "@expo/vector-icons";
+import { Popup } from "@/lib/popup";
+
+type Props = {
+	title: string;
+	type?: string;
+	data: any[];
+	loaded?: boolean;
+};
+
+const HorizontalList = ({ title, type, data, loaded }: Props) => {
+	const { width, height } = useWindowDimensions();
+	const w = Math.ceil(width);
+	const h = Math.ceil(height);
+
+	// <-----------------<HOOKS>----------------->
+	const router = useRouter();
+	const { currentTheme } = useContext(UIThemeContext);
+	const { data: User } = useUserDetails()
+	const darkTheme = currentTheme === "dark";
+	const { mutate: addToCartMutation, isPending: AddToCartLoading } = useAddToCart();
+
+	const [clickedItemId, setClickedItemId] = useState<string | null>(null);
+
+	// <----------------FUNCTIONS----------------> 
+	// API CALLS
+	const AddToCart = (id: string, forceReplace = false) => {
+		setClickedItemId(id);
+		addToCartMutation({
+			id: id,
+			quantity: 1,
+			user_id: User?.id || "",
+			force_replace: forceReplace,
+		}, {
+			onSettled: () => {
+				setClickedItemId(null);
+			},
+			onError: (error: any) => {
+				if (error?.type === "vendor_conflict") {
+					Popup.show({
+						title: "Replace Cart?",
+						message: `Your cart has items from ${error.existing_vendor}. Adding this will replace your current cart.`,
+						cancelText: "Cancel",
+						confirmText: "Replace",
+						isDestructive: true,
+						onConfirm: () => {
+							Popup.hide();
+							AddToCart(id, true);
+						}
+					});
+				}
+			}
+		});
+	}
+
+	if (!loaded && (!data || data.length === 0)) {
+		return (
+			<View className={` ${darkTheme ? "" : ""} shadow-2x`}>
+				<View className="px-5 justify-between flex-row items-center pt-2 pb-2">
+					<SkeletonText width={120} style={{ height: 16 }} />
+				</View>
+				<View style={{ height: w * 0.4, width: '100%', marginTop: 5 }}>
+					<FlashList
+						horizontal={true}
+						data={[...Array(3)]}
+						showsHorizontalScrollIndicator={false}
+						contentContainerStyle={{ paddingHorizontal: 20 }}
+						ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
+						renderItem={({ index }: { index: number }) => (
+							<View
+								key={index}
+								className={`relative overflow-hidden justify-end rounded shadow ${darkTheme ? "bg-gray-200/10" : "bg-white"
+									}`}
+								style={{ width: w * 0.36, height: '100%' }}
+							>
+								<Skeleton width="100%" height="100%" style={{ position: 'absolute' }} />
+								<View
+									className="justify-end h-[45%] z-10 w-full"
+									style={{ backgroundColor: darkTheme ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.8)" }}
+								>
+									<View className="gap-2 p-2">
+										<SkeletonText width="70%" style={{ height: 12 }} />
+										<SkeletonText width={type === "product" ? "60%" : "30%"} style={{ height: 12 }} />
+										{type === "product" && (
+											<View style={{ position: 'absolute', bottom: 4, right: 4 }}>
+												<SkeletonAvatar size={30} />
+											</View>
+										)}
+									</View>
+								</View>
+							</View>
+						)}
+					/>
+				</View>
+			</View>
+		);
+	}
+
+	if (loaded && (!data || !Array.isArray(data) || data.length === 0)) {
+		return null;
+	}
+
+
+	return (
+		<View className={`  ${darkTheme ? "" : ""} shadow-2x`}>
+			<View className="px-5 py-3 justify-between flex-row items-center">
+				<Text className={` text-xl font-semibold ${darkTheme ? "text-white" : "text-black"}`}>{title}</Text>
+			</View>
+			<View style={{ height: w * 0.52, width: '100%', marginTop: 5 }}>
+				<FlashList
+					horizontal
+					data={data}
+					showsHorizontalScrollIndicator={false}
+					contentContainerStyle={{ paddingHorizontal: 20 }}
+					ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
+					renderItem={({ item, index }: { item: any, index: number }) => (
+						<PressableScale
+							onPress={() => {
+								if (type === "product") {
+									router.push(`/product-details/${item.id}`);
+								} else {
+									router.push(`/vendor/${item.id}`);
+								}
+							}}
+							activeOpacity={0.9}
+						>
+							<View
+								className={`overflow-hidden relative shadow h-full ${darkTheme
+										? "bg-surface-container border border-outline-variant"
+										: "bg-white border border-gray-100"
+									}`}
+								style={{
+									width: w * 0.38,
+									borderRadius: 24
+								}}
+							>
+								{type === "product" && item.discount > 0 && (
+									<View
+										className={`absolute w-[65px]  bg-red-500 z-20 top-0 right-0 items-center justify-center rotate-45 translate-x-5 translate-y-2`}
+									>
+										<Text className={`text-white font-semibold`}>
+											{item.price ? `${Math.ceil((item.discount / item.price) * 100)}%` : "Sale"}
+										</Text>
+									</View>
+								)}
+								{/* IMAGE (PERFECT SQUARE) */}
+								<View className="w-full" style={{ height: w * 0.38 }}>
+									{
+										type == "product" ? (
+											<Image
+												source={{ uri: item.image_url }}
+												style={{ width: '100%', height: '100%', borderRadius: 24 }}
+												contentFit="cover"
+												transition={200}
+											/>
+										) : (
+											<Image
+												source={{ uri: item.profile_pic }}
+												style={{ width: '100%', height: '100%', borderRadius: 24 }}
+												contentFit="cover"
+												transition={200}
+											/>
+										)
+									}
+								</View>
+								{/* TEXT CONTENT WRAPPER */}
+								<View className="flex-1 px-3 py-2 justify-center">
+									{/* <-----------------<RENDER ACCORDING TO TYPE OF LIST>-----------------> */}
+									{type === "product" ? (
+										<Text
+											className={`font-bold text-sm ${darkTheme ? "text-white" : "text-gray-900"}`}
+											numberOfLines={1}
+										>
+											{item.name}
+										</Text>
+									) : (
+										<Text
+											className={`font-bold text-sm ${darkTheme ? "text-white" : "text-gray-900"}`}
+											numberOfLines={1}
+										>
+											{item.business_name}
+										</Text>
+									)}
+
+									{/* <-----------------<RENDER ACCORDING TO TYPE OF LIST>-----------------> */}
+									{type === "product" ? (
+										// <---------------------<PRODUCT PRICE>--------------------->
+										<View className={`flex-row gap-2 items-center mt-0.5`}>
+											<Text className={`font-semibold text-sm ${darkTheme ? "text-gray-300" : "text-gray-700"}`}>
+												KSH {Math.round((item.price - item.discount) * 100) / 100}
+											</Text>
+											{item.discount > 0 && (
+												<Text
+													className={`text-xs ${darkTheme ? "text-gray-500" : "text-gray-400"}`}
+													style={{
+														textDecorationLine: "line-through"
+													}}
+												>
+													{item.price}
+												</Text>
+											)}
+										</View>
+									) : (
+										// <------------------------<RATING>------------------------->
+										<View className="flex-row gap-3 justify-between items-center mt-1">
+											<View className="flex-row gap-1 items-center">
+												<Ionicons name="bicycle" size={14} color={BRAND.primary} />
+												<Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-600"}`}>{estimateDeliveryTime(item.lat, item.lng, User?.lat, User?.lng)}</Text>
+											</View>
+											<Text className={`text-xs font-bold ${darkTheme ? "text-gray-400" : "text-gray-600"}`}>
+												⭐ {Number(item.rating).toFixed(1)}
+											</Text>
+										</View>
+									)}
+
+									{/* <--------------------<ADD TO CART BUTTON>--------------------> */}
+									{type === "product" && (
+										<PressableScale
+											activeOpacity={0.6}
+											style={{ position: "absolute", bottom: 8, right: 8 }}
+											onPress={() => AddToCart(item.id)}
+										>
+											<View className={`${darkTheme ? 'bg-white/10' : 'bg-white'} p-2 w-[32px] h-[32px] items-center justify-center rounded-xl`}>
+												{AddToCartLoading && clickedItemId === item.id ? (
+													<SkeletonAvatar size={16} />
+												) : (
+													<Image
+														source={require("../../assets/icons/addtocart-black.png")}
+														style={{ width: 16, height: 16 }}
+														tintColor={darkTheme ? "white" : "black"}
+													/>
+												)}
+											</View>
+										</PressableScale>
+									)}
+								</View>
+							</View>
+						</PressableScale>
+					)}
+				/>
+			</View>
+		</View>
+	);
+};
+
+export default HorizontalList;

@@ -1,0 +1,69 @@
+{
+  "expo": {
+    "name": "vepo-rider",
+    "slug": "vepo-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.jpeg",
+    "scheme": "vepo-rider",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/vepo-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vepo.rider",
+      "config": {
+        "googleMapsApiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+      }
+    },
+    "android": {
+      "navigationBar": {
+        "translucent": true
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.jpeg"
+      },
+      "package": "com.vepo.rider",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+        }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

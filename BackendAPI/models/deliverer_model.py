@@ -1,0 +1,70 @@
+from db.session import Base
+from datetime import datetime, time, timezone
+import uuid
+from sqlalchemy import Column, String, Text, Boolean, TIMESTAMP, Float, Time, func, Index, Enum, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from enum import Enum as PyEnum
+from sqlalchemy.orm import relationship
+from geoalchemy2 import Geography
+
+class RiderVehicleType(str, PyEnum):
+    motorbike = "motorbike"
+    tuktuk = "tuktuk"
+    truck = "truck"
+
+class RiderEmploymentType(str, PyEnum):
+    gig_economy = "gig_economy"
+    in_house = "in_house"
+
+class KYCStatus(str, PyEnum):
+    unsubmitted = "unsubmitted"
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+class Deliverer(Base):
+  __tablename__ = "Deliverers"
+  __table_args__ = (
+      Index('idx_deliverer_location_gist', 'location', postgresql_using='gist'),
+  )
+  id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4, index=True)
+  clerk_id = Column(String, nullable=True, unique=True, index=True)
+  name = Column(String, index=True, nullable=False)
+  email = Column(String, unique=True, index=True, nullable=False) 
+  phone_number = Column(String, index=True, nullable=True)  #will revisit 
+  profile_pic = Column(Text, nullable=True)
+  driver_license = Column(Text, nullable=True)
+  ID_number = Column(String, nullable=False, index=True)
+  vehicle_type = Column(Enum(RiderVehicleType, name="rider_vehicle_type", create_type=False), nullable=False, default=RiderVehicleType.motorbike, index=True)
+  employment_model = Column(Enum(RiderEmploymentType, name="rider_employment_type", create_type=False), nullable=False, default=RiderEmploymentType.gig_economy, index=True)
+  employer_vendor_id = Column(UUID(as_uuid=True), ForeignKey("Vendors.id", ondelete="SET NULL"), nullable=True, index=True)
+
+  plate_number = Column(String, nullable=True, index=True)
+  id_card_front = Column(Text, nullable=True)
+  id_card_back = Column(Text, nullable=True)
+  kyc_status = Column(Enum(KYCStatus, name="deliverer_kyc_status", create_type=False), nullable=False, default=KYCStatus.unsubmitted, index=True)
+  
+  current_lat = Column(Float, nullable=True , index=True)
+  current_lng = Column(Float, nullable=True , index=True)
+  operation_lat = Column(Float, nullable=True)
+  operation_lng = Column(Float, nullable=True)
+  preferences = Column(JSONB, nullable=True)
+  payment_methods = Column(JSONB, nullable=True)
+  zone_changes_this_month = Column(Integer, default=0, nullable=False)
+  last_zone_change = Column(TIMESTAMP(timezone=True), nullable=True)
+  location = Column(Geography(geometry_type="POINT", srid=4326))
+  h3_index_res8 = Column(String(16), nullable=True, index=True)
+  is_available = Column(Boolean, default=True, index=True)
+  is_active = Column(Boolean, default=False, index=True)
+  is_verified = Column(Boolean, default=False, index=True)
+  is_platinum = Column(Boolean, default=False, index=True)  # Gamification tier (drops commission to 7%)
+  rating = Column(Float, default=5.0, index=True)
+  acceptance_rate = Column(Float, default=100.0)
+  shift_start = Column(Time, default=time(7,0), nullable=False, index=True)
+  shift_end = Column(Time, default=time(19,0), nullable=False, index=True)
+  push_token = Column(String(255), nullable=True)
+  created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
+  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
+  
+  # relationships
+  order = relationship("Order", back_populates="deliverer")

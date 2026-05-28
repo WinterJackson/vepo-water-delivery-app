@@ -1,0 +1,406 @@
+import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
+import { View, Text, StatusBar, FlatList, RefreshControl, Image, TextInput, Switch, Platform, TouchableOpacity, ActivityIndicator } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { UIThemeContext } from "@/context/ThemeContext";
+import { useAuth } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
+import PressableScale from "@/components/ui/PressableScale";
+import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
+import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
+import * as Location from "expo-location";
+import { Toast } from "@/lib/toast";
+import { useRiderStore } from "@/stores/useRiderStore";
+import { useRiderProfile } from "@/hooks/queries/useRiderData";
+import { BRAND } from "@/constants/brandColors";
+import { FlashList as OriginalFlashList } from "@shopify/flash-list";
+import { Ionicons } from "@expo/vector-icons";
+import { RiderDiscoverVendorCardSkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { darkMapStyle, standardMapStyle } from "@/constants/mapStyles";
+import { trackEvent } from "@/utils/analytics";
+import { Popup } from "@/lib/popup";
+
+const FlashList = OriginalFlashList as any;
+
+let MapView: any = null;
+let Marker: any = null;
+let UrlTile: any = null;
+let PROVIDER_GOOGLE: any = null;
+
+if (Platform.OS !== 'web') {
+    const maps = require('react-native-maps');
+    MapView = maps.default;
+    Marker = maps.Marker;
+    UrlTile = maps.UrlTile;
+    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
+} else {
+    MapView = ({ style, children }: any) => <View style={style}>{children}</View>;
+    Marker = () => null;
+    UrlTile = () => null;
+    PROVIDER_GOOGLE = 'google';
+}
+
+export default function DiscoverVendors() {
+  const { currentTheme } = useContext<any>(UIThemeContext);
+  const darkTheme = currentTheme === "dark";
+  const { getToken } = useAuth();
+  const router = useRouter();
+  const { data: profile, isLoading: isProfileLoading } = useRiderProfile();
+  
+  const [vendors, setVendors] = useState<any[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingLoc, setLoadingLoc] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isMapView, setIsMapView] = useState(false);
+  const [userLocation, setUserLocation] = useState<any>(null);
+  const mapRef = useRef<any>(null);
+  
+  const handleZoom = async (zoomIn: boolean) => {
+    if (!mapRef.current || Platform.OS === 'web') return;
+    try {
+      const camera = await mapRef.current.getCamera();
+      mapRef.current.animateCamera({
+        ...camera,
+        zoom: Math.max(1, Math.min(20, (camera.zoom || 15) + (zoomIn ? 1 : -1))),
+      }, { duration: 250 });
+    } catch {}
+  };
+
+  const snapToCurrentLocation = async () => {
+    try {
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setUserLocation(location.coords);
+      if (mapRef.current) {
+        mapRef.current.animateToRegion({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        });
+      }
+    } catch (e) {
+      Toast.error("Location Error", "Could not get your current location.");
+    }
+  };
+  
+  const { mutedVendors, toggleVendorMute } = useRiderStore();
+
+  const filteredVendors = vendors.filter((v: any) =>
+      v.business_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const activeVendorCount = vendors.filter((v: any) => v.status === "pending" || v.status === "approved").length;
+
+  const fetchVendors = async (lat: number, lng: number) => {
+    const token = await getToken();
+    try {
+      const route = RiderApiRoutes.DiscoverVendors(lat, lng);
+      const res = await fetch(route.path, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setVendors(data);
+      }
+    } catch (e) {
+      if (__DEV__) console.error(e);
+    }
+  };
+
+  const initData = async () => {
+    try {
+      if (profile?.operation_lat && profile?.operation_lng) {
+        setUserLocation({ latitude: profile.operation_lat, longitude: profile.operation_lng });
+        await fetchVendors(profile.operation_lat, profile.operation_lng);
+        return;
+      }
+
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Toast.error("Permission Denied", "Location is required to find nearby vendors");
+        setLoadingLoc(false);
+        return;
+      }
+      const location = await Location.getCurrentPositionAsync({});
+      setUserLocation(location.coords);
+      await fetchVendors(location.coords.latitude, location.coords.longitude);
+    } catch (e) {
+       // fallback generic coordinates if location fails
+       await fetchVendors(-1.2921, 36.8219);
+    } finally {
+       setLoadingLoc(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isProfileLoading) {
+      initData();
+    }
+  }, [isProfileLoading]);
+
+  useEffect(() => {
+    const delayDebounceFn = setTimeout(() => {
+      if (searchQuery.trim().length > 1) {
+        trackEvent('rider_discover_search', { query: searchQuery.trim(), count: filteredVendors.length });
+      }
+    }, 500);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, filteredVendors.length]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await initData();
+    setRefreshing(false);
+  }, []);
+
+  const handleApply = async (vendorId: string) => {
+    Popup.show({
+      title: "Register to Vendor",
+      message: "You can register to up to 10 vendors. Are you sure you want to apply to this one?",
+      cancelText: "Cancel",
+      confirmText: "Apply",
+      onConfirm: async () => {
+          Popup.hide();
+          const token = await getToken();
+          try {
+            const res = await fetch(RiderApiRoutes.ApplyVendor.path, {
+              method: RiderApiRoutes.ApplyVendor.method,
+              headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ vendor_id: vendorId })
+            });
+
+            if (res.ok) {
+              Toast.success("Applied", "Your registration is now pending approval.");
+              // Optimistic UI Update
+              setVendors(prev => prev.map(v => v.id === vendorId ? { ...v, status: "pending" } : v));
+            } else {
+              const data = await res.json();
+              Toast.error("Error", data.detail || "Application failed");
+            }
+          } catch (e) {
+            Toast.error("Error", "Network error");
+          }
+        }
+    });
+  };
+
+  const renderVendorCard = ({ item }: { item: any }) => (
+    <View className={`p-4 mb-4 rounded-2xl flex-row items-center ${darkTheme ? "bg-white/5" : "bg-white"}`}>
+      <View className="w-14 h-14 rounded-full bg-accentbg/10 mr-4 overflow-hidden border border-accentbg/20">
+        {item.profile_pic ? (
+          <Image source={{ uri: item.profile_pic }} className="w-full h-full" />
+        ) : (
+          <View className="flex-1 items-center justify-center">
+            <Ionicons name="business-outline" size={24} color={BRAND.primary} />
+          </View>
+        )}
+      </View>
+      <View className="flex-1">
+        <View className="flex-row items-center justify-between">
+          <Text className={`font-bold text-lg flex-1 ${darkTheme ? "text-white" : "text-gray-900"}`}>{item.business_name}</Text>
+          <Text className={`text-xs ml-2 font-bold ${darkTheme ? "text-accentbg" : "text-accentbg"}`}>{item.distance_km} KM</Text>
+        </View>
+        <Text className={`text-sm mt-1 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>{item.address}</Text>
+        
+         <View className="flex-row mt-3">
+            {item.status === "unregistered" && (
+              <>
+                {parseFloat(item.distance_km) > 2.0 ? (
+                  <View className="flex-1 py-2.5 rounded-lg bg-gray-500/10 border border-gray-500/20 items-center">
+                    <Text className="text-gray-500 font-semibold text-sm">Too Far ({item.distance_km} KM)</Text>
+                  </View>
+                ) : activeVendorCount >= 10 ? (
+                 <View className="flex-1 py-2.5 rounded-lg bg-gray-500/10 border border-gray-500/20 items-center">
+                   <Text className="text-gray-500 font-semibold text-sm">Max 10 Vendors Reached</Text>
+                 </View>
+               ) : (
+                 <PressableScale onPress={() => handleApply(item.id)} className="flex-1 py-2.5 rounded-lg bg-accentbg items-center">
+                   <Text className="text-white font-semibold text-sm">Apply</Text>
+                 </PressableScale>
+               )}
+             </>
+           )}
+           {item.status === "pending" && (
+             <View className="flex-1 py-2.5 rounded-lg bg-orange-500/10 border border-orange-500/20 items-center">
+               <Text className="text-orange-500 font-semibold text-sm">Pending Approval</Text>
+             </View>
+           )}
+           {item.status === "approved" && (() => {
+             const isMuted = mutedVendors.includes(item.id);
+             return (
+               <View className="flex-1 py-1.5 px-3 rounded-lg bg-green-500/10 border border-green-500/20 flex-row justify-between items-center">
+                 <Text className="text-green-600 font-semibold text-xs flex-1">
+                   {isMuted ? "Muted Locally" : "Receiving Orders"}
+                 </Text>
+                 <Switch
+                    value={!isMuted} // On means receiving orders (not muted)
+                    onValueChange={() => toggleVendorMute(item.id)}
+                    trackColor={{ false: darkTheme ? "#333" : "#ddd", true: BRAND.gold }}
+                    thumbColor="#fff"
+                 />
+               </View>
+             );
+           })()}
+           {item.status === "suspended" && (
+             <View className="flex-1 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 items-center">
+               <Text className="text-red-500 font-semibold text-sm">Suspended by Vendor</Text>
+             </View>
+           )}
+        </View>
+      </View>
+    </View>
+  );
+
+  return (
+    <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
+      <StatusBar translucent backgroundColor={darkTheme ? "black" : "white"} barStyle={darkTheme ? "light-content" : "dark-content"} />
+
+      {/* Header */}
+      <View style={{ overflow: "hidden", paddingBottom: 4 }}>
+          <View 
+              className="flex-row items-center px-4 py-3 pb-4 mb-2"
+              style={{ 
+                  backgroundColor: darkTheme ? "#000" : "#fff",
+                  borderBottomWidth: 1, 
+                  borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
+                  ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
+              }}
+          >
+              <TouchableOpacity onPress={() => router.back()} className="mr-4">
+                  <BackButtonMinimal />
+              </TouchableOpacity>
+              <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-black"}`}>
+                  Discover Vendors
+              </Text>
+          </View>
+      </View>
+
+      {/* Tools & Search */}
+      <View className="px-5 pt-2 pb-4">
+        <View className="flex-row justify-between items-start">
+          <View className="flex-1">
+            <Text className={`text-sm mt-1 mb-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Find and apply to up to 10 nearby water vendors.</Text>
+          </View>
+          <PressableScale
+            onPress={() => setIsMapView(!isMapView)}
+            className={`w-12 h-12 rounded-full items-center justify-center border ${darkTheme ? "bg-white/10 border-white/20" : "bg-white border-gray-200"}`}
+          >
+            <Ionicons name={isMapView ? "list-outline" : "map-outline"} size={24} color={BRAND.primary} />
+          </PressableScale>
+        </View>
+        
+        {/* Search Bar */}
+        <View className={`flex-row items-center px-4 py-3 rounded-2xl ${darkTheme ? "bg-white/5" : "bg-white"}`}>
+            <Ionicons name="search" size={20} color={BRAND.primary} />
+            <TextInput
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search by store name..."
+                placeholderTextColor={darkTheme ? "#9ca3af" : "#6b7280"}
+                className={`flex-1 font-semibold ${darkTheme ? "text-white" : "text-black"}`}
+            />
+        </View>
+      </View>
+
+      {/* Content */}
+      <View style={{ flex: 1 }}>
+        {isMapView ? (
+          <View className="flex-1">
+            {MapView && (
+              <>
+              <MapView
+                ref={mapRef}
+                style={{ flex: 1 }}
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 🟢 FREE OPEN SOURCE MVP MODE (CartoDB / OSM tiles)
+                //    Uses provider={undefined} + UrlTile overlay
+                provider={undefined}
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                // 🔴 PRODUCTION GOOGLE MAPS MODE
+                //    Swap the line above for this one:
+                // provider={PROVIDER_GOOGLE}
+                // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
+                zoomControlEnabled={false}
+                showsUserLocation={true}
+                showsMyLocationButton={false}
+                pitchEnabled={true}
+                showsCompass={true}
+                initialRegion={userLocation ? {
+                  latitude: userLocation.latitude,
+                  longitude: userLocation.longitude,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                } : {
+                  latitude: -1.2921,
+                  longitude: 36.8219,
+                  latitudeDelta: 0.05,
+                  longitudeDelta: 0.05,
+                }}
+              >
+                {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+                {/* 🟢 OSM TILE OVERLAY (Remove this block when using Google Maps) */}
+                {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
+                {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
+                {filteredVendors.map((vendor: any) => (
+                  <Marker
+                    key={vendor.id}
+                    coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}
+                    title={vendor.business_name}
+                    description={`${vendor.distance_km} KM away`}
+                    pinColor={vendor.status === 'approved' ? '#10b981' : vendor.status === 'pending' ? '#f59e0b' : '#0295f7'}
+                  />
+                ))}
+              </MapView>
+              <View className="absolute top-4 right-4 pointer-events-auto flex-row gap-2">
+                <PressableScale
+                  onPress={snapToCurrentLocation}
+                  className={`w-10 h-10 rounded-full items-center justify-center shadow-sm border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
+                  style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
+                >
+                  <View className={`w-4 h-4 rounded-full border-2 ${darkTheme ? "border-white" : "border-gray-800"}`} />
+                </PressableScale>
+                <PressableScale
+                  onPress={() => handleZoom(true)}
+                  className={`w-10 h-10 rounded-full items-center justify-center shadow-sm border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
+                  style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
+                >
+                  <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>+</Text>
+                </PressableScale>
+                <PressableScale
+                  onPress={() => handleZoom(false)}
+                  className={`w-10 h-10 rounded-full items-center justify-center shadow-sm border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
+                  style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
+                >
+                  <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>−</Text>
+                </PressableScale>
+              </View>
+              </>
+            )}
+          </View>
+        ) : (
+          <FlashList
+            data={filteredVendors}
+            keyExtractor={(item: any) => item.id}
+            renderItem={renderVendorCard}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 120 }}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            ListEmptyComponent={
+              <View className="items-center justify-center pt-20">
+                {loadingLoc ? (
+                   <View className="w-full mt-[-20px]">
+                       {[1, 2, 3, 4, 5].map(i => <RiderDiscoverVendorCardSkeleton key={i} />)}
+                   </View>
+                ) : (
+                   <>
+                     <Ionicons name="sad-outline" size={48} color={BRAND.primary} />
+                     <Text className={`text-lg mt-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>No vendors found nearby.</Text>
+                   </>
+                )}
+              </View>
+            }
+          />
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
