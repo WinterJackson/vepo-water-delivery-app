@@ -57,3 +57,5 @@ websockets==15.0.1
 redis>=5.0.0
 resend
 slowapi
+boto3
+alembic
