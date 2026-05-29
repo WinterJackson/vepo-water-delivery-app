@@ -56,3 +56,4 @@ watchfiles==1.0.5
 websockets==15.0.1
 redis>=5.0.0
 resend
+slowapi
