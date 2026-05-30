@@ -8,7 +8,9 @@
     "scheme": "vepo-vendor",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "androidNavigationBar": { "visible": "sticky-immersive" },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive"
+    },
     "splash": {
       "image": "./assets/images/vepo-logo.png",
       "resizeMode": "contain",
@@ -64,7 +66,11 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "b7abb95d-d95a-4ce1-b63c-5efd82d58a03"
+      }
+    },
+    "owner": "kuzzi-1"
   }
 }
