@@ -4,10 +4,11 @@
     "slug": "vepo-vendor",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.jpeg",
+    "icon": "./assets/images/icon.png",
     "scheme": "vepo-vendor",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "androidNavigationBar": { "visible": "sticky" },
     "splash": {
       "image": "./assets/images/vepo-logo.png",
       "resizeMode": "contain",
@@ -24,11 +25,8 @@
       }
     },
     "android": {
-      "navigationBar": {
-        "translucent": true
-      },
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.jpeg"
+        "foregroundImage": "./assets/images/icon.png"
       },
       "package": "com.vepo.vendor",
       "config": {
@@ -64,6 +62,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7754dd77-ea6b-456a-9228-bbbf8b097ff1"
+      }
     }
   }
 }
