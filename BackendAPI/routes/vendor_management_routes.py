@@ -49,6 +49,7 @@ class VendorProfileUpdateRequest(BaseModel):
     preferred_payment_method: Optional[List[str]] = None
     vendor_type: Optional[Literal["retail_refill", "wholesale_b2b"]] = None
     is_online: Optional[bool] = None
+    deposit_fee: Optional[float] = None
 
 
 class ProductCreateRequest(BaseModel):

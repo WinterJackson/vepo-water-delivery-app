@@ -101,7 +101,7 @@ export function usePushNotifications(queryPrefix: string = 'customer') {
                     await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/auth/push-token`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                        body: JSON.stringify({ push_token: token }),
+                        body: JSON.stringify({ push_token: token, app_type: 'customer' }),
                     });
                 } catch (e) { if (__DEV__) console.error("Push token registration failed:", e); }
             }

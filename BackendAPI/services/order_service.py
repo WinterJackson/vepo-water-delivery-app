@@ -565,6 +565,13 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str, id: UUID, 
       lng_from = first_item.vendor.lng
       vendor = await session.get(Vendor, vendor_id)
       vendor_type_str = vendor.vendor_type.value if vendor and vendor.vendor_type else "retail_refill"
+      
+      # --- Anti-Fraud: Self-Dealing Prevention ---
+      if user_check and vendor and (user_check.clerk_id == vendor.clerk_id or user_check.clerk_id == vendor.staff_clerk_id):
+          raise HTTPException(
+              status_code=403,
+              detail="Self-dealing prohibited. You cannot place an order from your own store."
+          )
 
       # --- V6: Wholesale MOQ Enforcement ---
       if vendor_type_str == "wholesale_b2b" and total_weight_kg < DispatchPolicy.WHOLESALE_MOQ_KG:

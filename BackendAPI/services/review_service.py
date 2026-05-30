@@ -6,7 +6,34 @@ from models.vendor_model import Vendor
 from models.deliverer_model import Deliverer
 from schemas.review_schemas import ReviewCreate
 
+from fastapi import HTTPException
+from models.order_model import Order
+
 async def create_review(session: AsyncSession, clerk_id: str, data: ReviewCreate):
+    # Fetch the order to ensure it belongs to the reviewing customer
+    order = await session.get(Order, data.order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    # Lazy load user via joinedload or direct fetch if needed, 
+    # but order.user_id can be used to query or just query user by clerk_id
+    from models.user_model import User
+    user = await session.get(User, order.customer_id) if hasattr(order, 'customer_id') else await session.get(User, order.user_id)
+    if not user or user.clerk_id != clerk_id:
+        raise HTTPException(status_code=403, detail="You can only review orders you have placed.")
+        
+    # Anti-Fraud: Self-Rating Prevention
+    if data.target_type == 'vendor':
+        target = await session.get(Vendor, data.target_id)
+        if target and (target.clerk_id == clerk_id or target.staff_clerk_id == clerk_id):
+            raise HTTPException(status_code=403, detail="Self-rating prohibited. You cannot review your own store.")
+    elif data.target_type == 'rider':
+        target = await session.get(Deliverer, data.target_id)
+        if target and target.clerk_id == clerk_id:
+            raise HTTPException(status_code=403, detail="Self-rating prohibited. You cannot review your own rider profile.")
+    else:
+        target = None
+
     # Create the review record
     review = Review(
         order_id=data.order_id,

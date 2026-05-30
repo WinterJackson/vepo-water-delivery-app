@@ -10,7 +10,8 @@ import {
     StatusBar,
     Text,
     View,
-    TextInput
+    TextInput,
+    Switch
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
@@ -24,7 +25,7 @@ import { Popup } from "@/lib/popup";
 import SearchBar from "@/components/common/Search";
 import { useVendorProducts } from "@/hooks/queries/useVendorProducts";
 
-const ProductCard = memo(({ item, darkTheme, onDelete }: { item: any, darkTheme: boolean, onDelete: (id: string) => void }) => {
+const ProductCard = memo(({ item, darkTheme, onDelete, onToggleAvailability }: { item: any, darkTheme: boolean, onDelete: (id: string) => void, onToggleAvailability: (id: string, isAvailable: boolean) => void }) => {
   return (
     <View 
       className={`flex-row items-center p-5 mb-4 rounded-[24px] border shadow-sm ${item.stock === 0 ? "opacity-60" : ""} ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} 
@@ -56,12 +57,19 @@ const ProductCard = memo(({ item, darkTheme, onDelete }: { item: any, darkTheme:
         </View>
       </View>
       
-      <View className="flex-row gap-2">
+      <View className="flex-row items-center gap-3">
+        <Switch
+          value={item.is_available}
+          onValueChange={(val) => onToggleAvailability(item.id, val)}
+          trackColor={{ false: darkTheme ? "#333" : "#e2e8f0", true: BRAND.primary }}
+          thumbColor={item.is_available ? "#fff" : "#f4f3f4"}
+          style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
+        />
         <PressableScale 
           onPress={() => onDelete(item.id)} 
-          className={`w-12 h-12 rounded-full items-center justify-center ${darkTheme ? "bg-red-900/20" : "bg-red-50"}`}
+          className={`w-10 h-10 rounded-full items-center justify-center ${darkTheme ? "bg-red-900/20" : "bg-red-50"}`}
         >
-          <Ionicons name="trash-outline" size={20} color="#ef4444" />
+          <Ionicons name="trash-outline" size={18} color="#ef4444" />
         </PressableScale>
       </View>
     </View>
@@ -123,6 +131,28 @@ export default function Products() {
     });
   }, [getToken, refetch]);
 
+  const handleToggleAvailability = useCallback(async (productId: string, isAvailable: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const token = await getToken();
+    const route = VendorApiRoutes.UpdateProduct(productId);
+    
+    // Optimistic UI update could be done here by manipulating cache, but refetch is safer for now
+    try {
+      await fetch(route.path, {
+        method: route.method,
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ is_available: isAvailable }),
+      });
+      await refetch();
+    } catch (e) {
+      if (__DEV__) console.error("Toggle error:", e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [getToken, refetch]);
+
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery.trim().length > 1) {
@@ -136,8 +166,8 @@ export default function Products() {
   }, [searchQuery, filteredProducts.length]);
 
   const renderItem = useCallback(({ item }: { item: any }) => (
-    <ProductCard item={item} darkTheme={darkTheme} onDelete={handleDelete} />
-  ), [darkTheme, handleDelete]);
+    <ProductCard item={item} darkTheme={darkTheme} onDelete={handleDelete} onToggleAvailability={handleToggleAvailability} />
+  ), [darkTheme, handleDelete, handleToggleAvailability]);
 
   return (
     <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>

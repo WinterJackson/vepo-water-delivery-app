@@ -513,6 +513,21 @@ async def assign_order_rider(session: AsyncSession, clerk_id: str, order_id: UUI
             deliverer_id=str(order.deliverer_id),
             payload={"action": "ORDER_ASSIGNED", "order_id": str(order.id), "status": order.order_status, "deliverer_id": str(rider.id)}
         )
+        
+        # Retract Trip Radar: notify all approved riders for this vendor that the order is taken
+        approved_riders_q = select(VendorRiderRegistry.rider_id).where(
+            and_(
+                VendorRiderRegistry.vendor_id == vendor.id,
+                VendorRiderRegistry.status == "approved"
+            )
+        )
+        approved_result = await session.execute(approved_riders_q)
+        approved_rider_ids = [str(r) for r in approved_result.scalars().all()]
+        if approved_rider_ids:
+            await manager.broadcast_to_riders(
+                rider_ids=approved_rider_ids,
+                payload={"action": "TRIP_RADAR_RETRACT", "order_id": str(order.id)}
+            )
     except Exception as e:
         logger.error(f"WS Broadcast fail in assign_order_rider: {e}")
 

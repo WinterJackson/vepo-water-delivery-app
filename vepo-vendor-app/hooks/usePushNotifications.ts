@@ -101,7 +101,7 @@ export function usePushNotifications(queryPrefix: string = 'vendor') {
                     await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/auth/push-token`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` },
-                        body: JSON.stringify({ push_token: token }),
+                        body: JSON.stringify({ push_token: token, app_type: 'vendor' }),
                     });
                 } catch (e) { console.error("Caught Unhandled Exception:", e); }
             }

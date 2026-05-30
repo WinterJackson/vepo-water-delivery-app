@@ -408,6 +408,7 @@ async def get_profile_status(app_type: str, db: AsyncSession = Depends(get_db), 
 # ─── Push Token Registration ─────────────────────────────────────────────────
 class PushTokenBody(BaseModel):
     push_token: str
+    app_type: str
 
 @router.post("/push-token")
 @limiter.limit("5/minute")
@@ -424,38 +425,39 @@ async def register_push_token(
     """
     clerk_id: str = user["sub"]
     token: str = body.push_token
+    app_type: str = body.app_type
 
     if not token or not token.startswith("ExponentPushToken"):
         raise HTTPException(status_code=400, detail="Invalid Expo push token format")
 
-    # Try Customer
-    result = await db.execute(select(User).where(User.clerk_id == clerk_id))
-    db_user = result.scalar_one_or_none()
-    if db_user:
-        db_user.push_token = token
-        await db.commit()
-        logger.info(f"Push token saved for customer {clerk_id}")
-        return {"message": "Push token registered"}
+    if app_type == "customer":
+        result = await db.execute(select(User).where(User.clerk_id == clerk_id))
+        db_user = result.scalar_one_or_none()
+        if db_user:
+            db_user.push_token = token
+            await db.commit()
+            logger.info(f"Push token saved for customer {clerk_id}")
+            return {"message": "Push token registered"}
+            
+    elif app_type == "vendor":
+        result = await db.execute(select(Vendor).where(or_(Vendor.clerk_id == clerk_id, Vendor.staff_clerk_id == clerk_id)))
+        db_vendor = result.scalar_one_or_none()
+        if db_vendor:
+            if db_vendor.staff_clerk_id == clerk_id:
+                db_vendor.staff_push_token = token
+            else:
+                db_vendor.push_token = token
+            await db.commit()
+            logger.info(f"Push token saved for vendor {clerk_id} (role={'staff' if db_vendor.staff_clerk_id == clerk_id else 'owner'})")
+            return {"message": "Push token registered"}
+            
+    elif app_type == "rider":
+        result = await db.execute(select(Deliverer).where(Deliverer.clerk_id == clerk_id))
+        db_rider = result.scalar_one_or_none()
+        if db_rider:
+            db_rider.push_token = token
+            await db.commit()
+            logger.info(f"Push token saved for rider {clerk_id}")
+            return {"message": "Push token registered"}
 
-    # Try Vendor (check both owner and staff)
-    result = await db.execute(select(Vendor).where(or_(Vendor.clerk_id == clerk_id, Vendor.staff_clerk_id == clerk_id)))
-    db_vendor = result.scalar_one_or_none()
-    if db_vendor:
-        if db_vendor.staff_clerk_id == clerk_id:
-            db_vendor.staff_push_token = token
-        else:
-            db_vendor.push_token = token
-        await db.commit()
-        logger.info(f"Push token saved for vendor {clerk_id} (role={'staff' if db_vendor.staff_clerk_id == clerk_id else 'owner'})")
-        return {"message": "Push token registered"}
-
-    # Try Rider/Deliverer
-    result = await db.execute(select(Deliverer).where(Deliverer.clerk_id == clerk_id))
-    db_rider = result.scalar_one_or_none()
-    if db_rider:
-        db_rider.push_token = token
-        await db.commit()
-        logger.info(f"Push token saved for rider {clerk_id}")
-        return {"message": "Push token registered"}
-
-    raise HTTPException(status_code=404, detail="Authenticated user not found in any user table")
+    raise HTTPException(status_code=404, detail=f"Authenticated user not found for app_type: {app_type}")

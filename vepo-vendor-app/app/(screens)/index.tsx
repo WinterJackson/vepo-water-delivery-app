@@ -194,15 +194,15 @@ export default function Dashboard() {
             </ScrollView>
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16 }}>
-              <StatCard title="Total Orders" value={dashboard?.total_orders || 0} icon="cube-outline" color="{BRAND.primary}" />
-              <StatCard title="Pending" value={dashboard?.pending_orders || 0} icon="time-outline" color="{BRAND.primary}" />
+              <StatCard title="Total Orders" value={dashboard?.total_orders || 0} icon="cube-outline" color={BRAND.primary} />
+              <StatCard title="Pending" value={dashboard?.pending_orders || 0} icon="time-outline" color={BRAND.primary} />
               <StatCard
                 title="Revenue"
                 value={`KSH ${dashboard?.total_revenue?.toLocaleString() || 0}`}
-                icon="cash-outline" color="#10b981"
+                icon="cash-outline" color={BRAND.primary}
               />
-              <StatCard title="Products" value={dashboard?.product_count || 0} icon="pricetags-outline" color="{BRAND.primary}" />
-              <StatCard title="Rating" value={dashboard?.rating?.toFixed(1) || "0.0"} icon="star-outline" color="{BRAND.primary}" />
+              <StatCard title="Products" value={dashboard?.product_count || 0} icon="pricetags-outline" color={BRAND.primary} />
+              <StatCard title="Rating" value={dashboard?.rating?.toFixed(1) || "0.0"} icon="star-outline" color={BRAND.primary} />
             </ScrollView>
           )}
         </View>

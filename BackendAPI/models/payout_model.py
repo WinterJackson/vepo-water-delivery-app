@@ -20,6 +20,7 @@ class Payout(Base):
     conversation_id = Column(String(255), nullable=True, index=True)  # M-Pesa B2C ConversationID
     mpesa_receipt = Column(String(255), nullable=True, index=True)  # M-Pesa B2C receipt number
     failure_reason = Column(String(500), nullable=True)  # Reason for failure if applicable
+    idempotency_key = Column(String(255), nullable=True, unique=True, index=True) # For UI/UX duplicate prevention
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=datetime.datetime.now(datetime.timezone.utc))

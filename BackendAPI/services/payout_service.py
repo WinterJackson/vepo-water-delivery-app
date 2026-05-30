@@ -66,6 +66,14 @@ async def request_payout(session: AsyncSession, clerk_id: str, data: PayoutCreat
     if data.amount <= 0:
         raise HTTPException(status_code=400, detail="Payout amount must be greater than zero.")
 
+    # ── Idempotency Check ──
+    if data.idempotency_key:
+        existing_payout_q = select(Payout).where(Payout.idempotency_key == data.idempotency_key)
+        existing_payout = (await session.execute(existing_payout_q)).scalar_one_or_none()
+        if existing_payout:
+            # Already processed, return it (idempotent success)
+            return existing_payout
+
     # Get limits
     min_threshold, tx_fee = await get_payout_limits(session, clerk_id, provider_id, provider_type)
     
@@ -101,6 +109,7 @@ async def request_payout(session: AsyncSession, clerk_id: str, data: PayoutCreat
         amount=data.amount, # Full amount is deducted from ledger
         payment_method=data.payment_method,
         account_details=data.account_details,
+        idempotency_key=data.idempotency_key,
         status="pending"
     )
     session.add(payout)

@@ -3,6 +3,7 @@ import { OrderDetailSkeleton } from "@/components/skeletons/ContextualSkeletons"
 import { UIThemeContext } from "@/context/ThemeContext";
 import { BRAND, TOAST } from "@/constants/brandColors";
 import { useOrders, useCancelOrder, Order } from "@/hooks/queries/useOrders";
+import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts";
 import { Toast } from "@/lib/toast";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useContext, useMemo, useState, useRef, useEffect } from "react";
@@ -15,7 +16,8 @@ import {
     View,
     Platform,
     Dimensions,
-    Modal
+    Modal,
+    Linking
 } from "react-native";
 import { useRiderTracking } from "@/hooks/queries/useRiderTracking";
 
@@ -84,6 +86,20 @@ export default function OrderDetail() {
 
     const shouldTrackRider = order?.order_status === "picked_up" || order?.order_status === "in_transit" || order?.order_status === "mismatch_pending";
     const { data: riderLocation } = useRiderTracking(order?.id || null, shouldTrackRider);
+
+    // Cross-party contact info (only fetched during active states)
+    const { data: contactsData } = useOrderContacts(order?.id || null, order?.order_status || null);
+    const contacts = contactsData?.contacts || [];
+    const vendorContact = contacts.find((c: ContactInfo) => c.role === "vendor");
+    const riderContact = contacts.find((c: ContactInfo) => c.role === "rider");
+
+    const handleCall = (phone: string, role: string) => {
+        if (!phone || phone === "N/A") {
+            Toast.error("Unavailable", `${role} phone number is not available.`);
+            return;
+        }
+        Linking.openURL(`tel:${phone}`);
+    };
 
     const mapRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
@@ -314,6 +330,69 @@ export default function OrderDetail() {
                          </View>
                      </View>
                  )}
+
+                {/* ── Cross-Party Contact Cards ────────────────────────── */}
+                {contacts.length > 0 && (
+                    <View className={`p-5 rounded-2xl mb-5 ${darkTheme ? "bg-white/5" : "bg-white"}`}>
+                        <Text className={`text-lg font-bold mb-4 ${darkTheme ? "text-white" : "text-black"}`}>
+                            Contact
+                        </Text>
+                        <View className="gap-3">
+                            {vendorContact && (
+                                <PressableScale
+                                    activeOpacity={0.8}
+                                    onPress={() => handleCall(vendorContact.phone, "Vendor")}
+                                    className="flex-row items-center gap-3 p-3 rounded-xl"
+                                    style={{
+                                        backgroundColor: darkTheme ? 'rgba(2, 149, 247, 0.08)' : 'rgba(2, 149, 247, 0.06)',
+                                        borderWidth: 1,
+                                        borderColor: darkTheme ? 'rgba(2, 149, 247, 0.15)' : 'rgba(2, 149, 247, 0.12)',
+                                    }}
+                                >
+                                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary + '20' }}>
+                                        <Text style={{ fontSize: 18 }}>🏪</Text>
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-black"}`}>
+                                            {vendorContact.name}
+                                        </Text>
+                                        <Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Tap to call vendor</Text>
+                                    </View>
+                                    <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary }}>
+                                        <Text className="text-white text-lg">📞</Text>
+                                    </View>
+                                </PressableScale>
+                            )}
+                            {riderContact && (
+                                <PressableScale
+                                    activeOpacity={0.8}
+                                    onPress={() => handleCall(riderContact.phone, "Rider")}
+                                    className="flex-row items-center gap-3 p-3 rounded-xl"
+                                    style={{
+                                        backgroundColor: darkTheme ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.06)',
+                                        borderWidth: 1,
+                                        borderColor: darkTheme ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.12)',
+                                    }}
+                                >
+                                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: TOAST.success + '20' }}>
+                                        <Text style={{ fontSize: 18 }}>🛵</Text>
+                                    </View>
+                                    <View className="flex-1">
+                                        <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-black"}`}>
+                                            {riderContact.name}
+                                        </Text>
+                                        <Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                            {riderContact.vehicle_details ? `${riderContact.vehicle_details} • ` : ""}Tap to call rider
+                                        </Text>
+                                    </View>
+                                    <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: TOAST.success }}>
+                                        <Text className="text-white text-lg">📞</Text>
+                                    </View>
+                                </PressableScale>
+                            )}
+                        </View>
+                    </View>
+                )}
 
                 {/* Vendor Info */}
                 {order.vendor && (

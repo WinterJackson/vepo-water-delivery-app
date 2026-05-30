@@ -4,7 +4,7 @@ import { useUpdateOrderStatus, useVendorOrders } from "@/hooks/queries/useVendor
 import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useContext, useState } from "react";
-import { ScrollView, StatusBar, Text, View } from "react-native";
+import { ScrollView, StatusBar, Text, View, Linking } from "react-native";
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
 import { SafeAreaView } from "react-native-safe-area-context";
 import PressableScale from "@/components/ui/PressableScale";
@@ -16,17 +16,33 @@ import { Image } from "expo-image";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { VendorOrderDetailSkeleton } from "@/components/skeletons/ContextualSkeletons";
 import { BRAND } from "@/constants/brandColors";
+import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts";
 import { useRef, useMemo, useCallback } from "react";
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-[#f59e0b]/20 border-[#f59e0b]/30 text-[#f59e0b]",
-  accepted: "bg-accentbg/20 border-accentbg/30 text-accentbg",
-  preparing: "bg-purple-500/20 border-purple-500/30 text-purple-500",
-  ready: "bg-[#10b981]/20 border-[#10b981]/30 text-[#10b981]",
-  rejected: "bg-red-500/20 border-red-500/30 text-red-500",
-  in_transit: "bg-[#0ea5e9]/20 border-[#0ea5e9]/30 text-[#0ea5e9]",
-  delivered: "bg-[#10b981]/20 border-[#10b981]/30 text-[#10b981]",
-  unassigned: "bg-slate-500/20 border-slate-500/30 text-slate-500",
+  pending: "bg-[#f59e0b]/20 border-[#f59e0b]/30",
+  accepted: "bg-accentbg/20 border-accentbg/30",
+  preparing: "bg-purple-500/20 border-purple-500/30",
+  ready: "bg-[#10b981]/20 border-[#10b981]/30",
+  rejected: "bg-red-500/20 border-red-500/30",
+  in_transit: "bg-[#0ea5e9]/20 border-[#0ea5e9]/30",
+  picked_up: "bg-[#0ea5e9]/20 border-[#0ea5e9]/30",
+  delivered: "bg-[#10b981]/20 border-[#10b981]/30",
+  unassigned: "bg-slate-500/20 border-slate-500/30",
+  cancelled: "bg-red-500/20 border-red-500/30",
+};
+
+const STATUS_TEXT_COLORS: Record<string, string> = {
+  pending: "text-[#f59e0b]",
+  accepted: "text-accentbg",
+  preparing: "text-purple-500",
+  ready: "text-[#10b981]",
+  rejected: "text-red-500",
+  in_transit: "text-[#0ea5e9]",
+  picked_up: "text-[#0ea5e9]",
+  delivered: "text-[#10b981]",
+  unassigned: "text-slate-500",
+  cancelled: "text-red-500",
 };
 
 export default function OrderDetail() {
@@ -50,6 +66,22 @@ export default function OrderDetail() {
   ), []);
 
   const order = orders.find((o: any) => o.id === id);
+
+  // Cross-party contact info (only fetched during active states)
+  const { data: contactsData } = useOrderContacts(order?.id || null, order?.order_status || null);
+  const contacts = contactsData?.contacts || [];
+  const customerContact = contacts.find((c: ContactInfo) => c.role === "customer");
+  const riderContact = contacts.find((c: ContactInfo) => c.role === "rider");
+
+  const handleCall = (phone: string, role: string) => {
+      if (!phone || phone === "N/A") {
+          import("@/lib/toast").then(({ Toast }) => {
+              Toast.error("Unavailable", `${role} phone number is not available.`);
+          });
+          return;
+      }
+      Linking.openURL(`tel:${phone}`);
+  };
 
   const fetchRiders = async () => {
     const token = await getToken();
@@ -148,8 +180,8 @@ export default function OrderDetail() {
         <ScrollView className="flex-1 px-5 pt-6" contentContainerStyle={{ paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
           {/* Status indicator */}
           <View className="items-center mb-6">
-            <View className={`px-5 py-2.5 rounded-full border ${STATUS_COLORS[order.order_status] || "bg-slate-200 border-slate-300 text-slate-700"}`}>
-              <Text className={`text-sm font-bold capitalize tracking-wider`}>
+            <View className={`px-5 py-2.5 rounded-full border ${STATUS_COLORS[order.order_status] || "bg-slate-200 border-slate-300"}`}>
+              <Text className={`text-sm font-bold capitalize tracking-wider ${STATUS_TEXT_COLORS[order.order_status] || "text-slate-700"}`}>
                 {order.order_status.replace("_", " ")}
               </Text>
             </View>
@@ -194,6 +226,61 @@ export default function OrderDetail() {
             )}
           </View>
 
+          {/* ── Cross-Party Contact Cards ────────────────────────── */}
+          {contacts.length > 0 && (
+            <View className={`p-5 rounded-[24px] mb-5 border shadow-sm ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} style={darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }}>
+              <Text className={`font-bold text-lg mb-4 ${darkTheme ? "text-white" : "text-gray-900"}`}>Contact</Text>
+              <View className="gap-3">
+                {customerContact && (
+                  <PressableScale
+                    onPress={() => handleCall(customerContact.phone, "Customer")}
+                    className="flex-row items-center gap-3 p-3 rounded-xl"
+                    style={{
+                      backgroundColor: darkTheme ? 'rgba(2, 149, 247, 0.08)' : 'rgba(2, 149, 247, 0.06)',
+                      borderWidth: 1,
+                      borderColor: darkTheme ? 'rgba(2, 149, 247, 0.15)' : 'rgba(2, 149, 247, 0.12)',
+                    }}
+                  >
+                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary + '20' }}>
+                      <Ionicons name="person" size={20} color={BRAND.primary} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-slate-900"}`}>{customerContact.name}</Text>
+                      <Text className={`text-xs ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>Tap to call customer</Text>
+                    </View>
+                    <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary }}>
+                      <Ionicons name="call" size={18} color="#fff" />
+                    </View>
+                  </PressableScale>
+                )}
+                {riderContact && (
+                  <PressableScale
+                    onPress={() => handleCall(riderContact.phone, "Rider")}
+                    className="flex-row items-center gap-3 p-3 rounded-xl"
+                    style={{
+                      backgroundColor: darkTheme ? 'rgba(14, 165, 233, 0.08)' : 'rgba(14, 165, 233, 0.06)',
+                      borderWidth: 1,
+                      borderColor: darkTheme ? 'rgba(14, 165, 233, 0.15)' : 'rgba(14, 165, 233, 0.12)',
+                    }}
+                  >
+                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: '#0ea5e920' }}>
+                      <Ionicons name="bicycle" size={20} color="#0ea5e9" />
+                    </View>
+                    <View className="flex-1">
+                      <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-slate-900"}`}>{riderContact.name}</Text>
+                      <Text className={`text-xs ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>
+                        {riderContact.vehicle_details ? `${riderContact.vehicle_details} • ` : ""}Tap to call rider
+                      </Text>
+                    </View>
+                    <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: '#0ea5e9' }}>
+                      <Ionicons name="call" size={18} color="#fff" />
+                    </View>
+                  </PressableScale>
+                )}
+              </View>
+            </View>
+          )}
+
           {/* Order Items */}
           <View className={`p-5 rounded-[24px] mb-5 border shadow-sm ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}>
             <Text className={`font-bold text-lg mb-4 ${darkTheme ? "text-white" : "text-gray-900"}`}>Order Items</Text>
@@ -218,7 +305,7 @@ export default function OrderDetail() {
           {order.delivery_type && (
             <View className={`p-5 rounded-[24px] mb-5 border shadow-sm ${darkTheme ? "bg-amber-900/10 border-amber-500/20" : "bg-amber-50 border-amber-200"}`} style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}>
               <View className="flex-row items-center mb-3">
-                 <Ionicons name="water-outline" size={20} color="{BRAND.primary}" className="mr-2" />
+                 <Ionicons name="water-outline" size={20} color={BRAND.primary} style={{ marginRight: 8 }} />
                  <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-gray-900"}`}>Delivery Flow</Text>
               </View>
               
@@ -274,12 +361,12 @@ export default function OrderDetail() {
           {order.rider && (
             <View className={`p-5 rounded-[24px] mb-10 border shadow-sm ${darkTheme ? "bg-[#0ea5e9]/10 border-[#0ea5e9]/20" : "bg-[#0ea5e9]/5 border-[#0ea5e9]/10"}`} style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}>
               <View className="flex-row items-center mb-4">
-                 <Ionicons name="bicycle" size={24} color="{BRAND.primary}" className="mr-2" />
+                 <Ionicons name="bicycle" size={24} color={BRAND.primary} style={{ marginRight: 8 }} />
                  <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-gray-900"}`}>Assigned Rider</Text>
               </View>
               <View className="flex-row items-center mb-2">
                  <View className="w-10 h-10 rounded-full items-center justify-center bg-[#0ea5e9]/20 mr-3">
-                    <Ionicons name="person" size={18} color="{BRAND.primary}" />
+                    <Ionicons name="person" size={18} color={BRAND.primary} />
                  </View>
                  <View>
                    <Text className={`text-xs font-semibold ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>Name</Text>
@@ -288,7 +375,7 @@ export default function OrderDetail() {
                </View>
                <View className="flex-row items-center">
                  <View className="w-10 h-10 rounded-full items-center justify-center bg-[#0ea5e9]/20 mr-3">
-                    <Ionicons name="car" size={18} color="{BRAND.primary}" />
+                    <Ionicons name="car" size={18} color={BRAND.primary} />
                  </View>
                  <View>
                    <Text className={`text-xs font-semibold ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>Vehicle</Text>
@@ -347,12 +434,23 @@ export default function OrderDetail() {
             </PressableScale>
           )}
 
-          {(order.order_status === "ready" || order.order_status === "in_transit" || order.order_status === "delivered") && (
-            <View className={`w-full py-4 rounded-[16px] items-center border ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-slate-100"}`}>
-              <Text className={`font-bold text-lg ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>
-                {order.order_status === "delivered" ? "Order Delivered" : "Waiting for Rider"}
-              </Text>
-            </View>
+          {(order.order_status === "ready" || order.order_status === "in_transit" || order.order_status === "picked_up" || order.order_status === "delivered") && (
+            <>
+              {order.order_status === "delivered" ? (
+                <View className={`w-full py-4 rounded-[16px] items-center border ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-slate-100"}`}>
+                  <Text className={`font-bold text-lg ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>
+                    Order Delivered
+                  </Text>
+                </View>
+              ) : (
+                <PressableScale
+                  onPress={() => router.push(`/(screens)/Map/${order.id}` as any)}
+                  className="w-full bg-accentbg py-4 rounded-[16px] items-center shadow-sm"
+                >
+                  <Text className="text-white font-bold text-lg">Track Delivery</Text>
+                </PressableScale>
+              )}
+            </>
           )}
         </View>
 
@@ -392,7 +490,7 @@ export default function OrderDetail() {
                     {r.profile_pic ? (
                       <Image source={{ uri: r.profile_pic }} className="w-full h-full rounded-full" />
                     ) : (
-                      <Ionicons name="person" size={20} color="{BRAND.primary}" />
+                      <Ionicons name="person" size={20} color={BRAND.primary} />
                     )}
                   </View>
                   <View>

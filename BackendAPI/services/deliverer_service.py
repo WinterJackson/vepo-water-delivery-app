@@ -483,8 +483,8 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
     if not deliverer.is_available:
         raise HTTPException(status_code=400, detail="You must be online and available to accept orders.")
 
-    # Concurrency safe lock
-    query = select(Order).where(Order.id == order_id).with_for_update(nowait=True)
+    # Concurrency safe lock with joinedload for anti-fraud checks
+    query = select(Order).options(joinedload(Order.user), joinedload(Order.vendor)).where(Order.id == order_id).with_for_update(nowait=True)
     try:
         result = await session.execute(query)
         order = result.scalar_one_or_none()
@@ -495,6 +495,14 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+
+    # Anti-Fraud: Self-Dealing Prevention
+    if order.user and order.user.clerk_id == clerk_id:
+        await session.rollback()
+        raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver your own personal order.")
+    if order.vendor and (order.vendor.clerk_id == clerk_id or order.vendor.staff_clerk_id == clerk_id):
+        await session.rollback()
+        raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver for a store you manage.")
 
     if order.order_status != "unassigned" or order.deliverer_id is not None:
         await session.rollback()

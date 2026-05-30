@@ -7,6 +7,7 @@ class PayoutCreate(BaseModel):
     amount: float
     payment_method: str
     account_details: str
+    idempotency_key: Optional[str] = None
 
 class PayoutResponse(BaseModel):
     id: UUID

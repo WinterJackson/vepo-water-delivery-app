@@ -32,6 +32,10 @@ const STATUS_COLORS: Record<string, string> = {
   ready: "bg-green-500/20",
   rejected: "bg-red-500/20",
   unassigned: "bg-orange-500/20",
+  in_transit: "bg-blue-500/20",
+  picked_up: "bg-blue-500/20",
+  delivered: "bg-green-500/20",
+  cancelled: "bg-red-500/20",
 };
 
 const STATUS_TEXT: Record<string, string> = {
@@ -41,6 +45,10 @@ const STATUS_TEXT: Record<string, string> = {
   ready: "text-green-600",
   rejected: "text-red-600",
   unassigned: "text-orange-600",
+  in_transit: "text-blue-600",
+  picked_up: "text-blue-600",
+  delivered: "text-green-600",
+  cancelled: "text-red-600",
 };
 
 // Memoized order item to prevent unnecessary re-renders during WebSocket updates

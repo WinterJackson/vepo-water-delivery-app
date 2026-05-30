@@ -44,6 +44,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Popup } from "@/lib/popup";
 import { RiderActiveDeliverySkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts";
 
 let MapView: any = null;
 let Marker: any = null;
@@ -88,6 +89,22 @@ export default function ActiveDelivery() {
   const riderId = useRiderStore((s) => s.riderId);
   const { mutateAsync: rejectDelivery, isPending: isRejecting } = useRejectDelivery();
   const [emptiesReceived, setEmptiesReceived] = useState<number>(0);
+
+  // Cross-party contact info
+  const { data: contactsData } = useOrderContacts(activeOrder?.id || null, activeOrder?.order_status || null);
+  const contacts = contactsData?.contacts || [];
+  const customerContact = contacts.find((c: ContactInfo) => c.role === "customer");
+  const vendorContact = contacts.find((c: ContactInfo) => c.role === "vendor");
+
+  const handleCall = (phone: string, role: string) => {
+      if (!phone || phone === "N/A") {
+          import("@/lib/toast").then(({ Toast }) => {
+              Toast.error("Unavailable", `${role} phone number is not available.`);
+          });
+          return;
+      }
+      Linking.openURL(`tel:${phone}`);
+  };
 
   // Derive empties expected from delivery_type and order items
   const computedEmptiesExpected = activeOrder?.delivery_type === 'quick_swap'
@@ -563,16 +580,6 @@ export default function ActiveDelivery() {
                       KSH {activeOrder.total_amount} · {activeOrder.order_item?.length || 0} item(s)
                     </Text>
                   </View>
-                  
-                  {/* Phone Driver Button */}
-                  {activeOrder.phone && (
-                    <PressableScale
-                      onPress={() => Linking.openURL(`tel:${activeOrder.phone}`)}
-                      className="w-[45px] h-[45px] bg-green-500/10 rounded-full items-center justify-center border border-green-500/20"
-                    >
-                      <Ionicons name="call" size={20} color={TOAST.success} />
-                    </PressableScale>
-                  )}
                 </View>
 
                 {/* Navigation Links */}
@@ -595,6 +602,59 @@ export default function ActiveDelivery() {
                     <Text className={`font-semibold ${(activeOrder.order_status === "picked_up" || activeOrder.order_status === "in_transit") ? "text-accentbg" : darkTheme ? "text-on-surface" : "text-gray-800"}`}>Nav to Dropoff</Text>
                   </PressableScale>
                 </View>
+
+                {/* ── Cross-Party Contact Cards ────────────────────────── */}
+                {contacts.length > 0 && (
+                  <View className={`mt-4 pt-4 border-t ${darkTheme ? "border-outline-variant" : "border-gray-200"}`}>
+                    <Text className={`font-bold text-base mb-3 ${darkTheme ? "text-white" : "text-gray-900"}`}>Contact</Text>
+                    <View className="gap-2">
+                      {customerContact && (
+                        <PressableScale
+                          onPress={() => handleCall(customerContact.phone, "Customer")}
+                          className="flex-row items-center gap-3 p-3 rounded-xl"
+                          style={{
+                            backgroundColor: darkTheme ? 'rgba(16, 185, 129, 0.08)' : 'rgba(16, 185, 129, 0.06)',
+                            borderWidth: 1,
+                            borderColor: darkTheme ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.12)',
+                          }}
+                        >
+                          <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: TOAST.success + '20' }}>
+                            <Ionicons name="person" size={18} color={TOAST.success} />
+                          </View>
+                          <View className="flex-1">
+                            <Text className={`font-bold text-sm ${darkTheme ? "text-white" : "text-slate-900"}`}>{customerContact.name}</Text>
+                            <Text className={`text-xs ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>Tap to call customer</Text>
+                          </View>
+                          <View className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: TOAST.success }}>
+                            <Ionicons name="call" size={16} color="#fff" />
+                          </View>
+                        </PressableScale>
+                      )}
+                      {vendorContact && (
+                        <PressableScale
+                          onPress={() => handleCall(vendorContact.phone, "Vendor")}
+                          className="flex-row items-center gap-3 p-3 rounded-xl"
+                          style={{
+                            backgroundColor: darkTheme ? 'rgba(2, 149, 247, 0.08)' : 'rgba(2, 149, 247, 0.06)',
+                            borderWidth: 1,
+                            borderColor: darkTheme ? 'rgba(2, 149, 247, 0.15)' : 'rgba(2, 149, 247, 0.12)',
+                          }}
+                        >
+                          <View className="w-10 h-10 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary + '20' }}>
+                            <Ionicons name="storefront" size={18} color={BRAND.primary} />
+                          </View>
+                          <View className="flex-1">
+                            <Text className={`font-bold text-sm ${darkTheme ? "text-white" : "text-slate-900"}`}>{vendorContact.name}</Text>
+                            <Text className={`text-xs ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>Tap to call vendor</Text>
+                          </View>
+                          <View className="w-9 h-9 rounded-full items-center justify-center" style={{ backgroundColor: BRAND.primary }}>
+                            <Ionicons name="call" size={16} color="#fff" />
+                          </View>
+                        </PressableScale>
+                      )}
+                    </View>
+                  </View>
+                )}
               </View>
 
               {/* Action Buttons */}

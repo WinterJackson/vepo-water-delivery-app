@@ -101,8 +101,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
 # Apply global payload compression (down to 500 bytes minimum to save processing overhead)
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# Trust Proxy Headers (Critical for Safaricom IP whitelisting on Render/Heroku)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
 # Apply Security Headers Middleware
 app.add_middleware(SecurityHeadersMiddleware)
@@ -141,6 +146,9 @@ app.include_router(refund_routes.router, prefix="/api/refunds", tags=["Refunds"]
 app.include_router(sync_routes.router, prefix="/api/sync", tags=["Sync"])
 app.include_router(sms_routes.router, prefix="/api/sms", tags=["SMS Fallback"])
 app.include_router(vendor_remittance_routes.router, prefix="/api/vendor_remittance", tags=["VendorRemittance"])
+from routes import contact_routes
+app.include_router(contact_routes.router, prefix="/api", tags=["Contacts"])
+
 
 # --- WebSocket Routes ---
 app.include_router(websocket_routes.router, tags=["WebSocket"])

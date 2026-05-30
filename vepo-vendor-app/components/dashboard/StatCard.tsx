@@ -25,7 +25,7 @@ export default function StatCard({ title, value, icon, color }: StatCardProps) {
       style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
     >
       <View className={`w-10 h-10 rounded-full items-center justify-center ${darkTheme ? "bg-slate-800/80" : "bg-white"}`}>
-        <Ionicons name={icon} size={20} color={BRAND.primary} />
+        <Ionicons name={icon} size={20} color={color || BRAND.primary} />
       </View>
       <View>
         <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-slate-900"}`} numberOfLines={1}>

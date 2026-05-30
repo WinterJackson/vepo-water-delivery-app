@@ -12,6 +12,7 @@ import { FlashList } from "@shopify/flash-list";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import * as Haptics from "expo-haptics";
 import { BRAND, TOAST } from "@/constants/brandColors";
+import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
 
 interface BalanceMetrics {
   lifetime_earnings: number;
@@ -65,7 +66,7 @@ export default function Cashout() {
   const fetchLedgers = async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/payouts/balance`, {
+      const res = await fetch(VendorApiRoutes.GetPayouts.path, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -106,8 +107,8 @@ export default function Cashout() {
     setProcessing(true);
     try {
       const token = await getToken();
-      const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/payouts/request`, {
-        method: 'POST',
+      const res = await fetch(VendorApiRoutes.RequestPayout.path, {
+        method: VendorApiRoutes.RequestPayout.method,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`
@@ -115,7 +116,8 @@ export default function Cashout() {
         body: JSON.stringify({
           amount: Number(withdrawAmount),
           payment_method: "mpesa",
-          account_details: accountDetails
+          account_details: accountDetails,
+          idempotency_key: `cashout_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
         })
       });
       
