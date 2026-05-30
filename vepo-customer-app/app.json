@@ -8,7 +8,7 @@
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "androidNavigationBar": { "visible": "sticky" },
+    "androidNavigationBar": { "visible": "sticky-immersive" },
     "splash": {
       "image": "./assets/images/vepo-logo.png",
       "resizeMode": "contain",

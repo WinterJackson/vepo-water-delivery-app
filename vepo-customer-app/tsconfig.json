@@ -10,5 +10,5 @@
 		"lib": ["es2021", "DOM", "ESNext"],
 		"paths": { "@/*": ["./*"] }
 	},
-	"include": [ "**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts", "components/SVGS/LoginSvg.jsx", "constants/icons/icons.js" ]
+	"include": [ "**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts", "nativewind-env.d.ts", "constants/icons/icons.js" ]
 }
