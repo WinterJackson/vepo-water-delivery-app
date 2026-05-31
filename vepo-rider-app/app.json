@@ -8,7 +8,9 @@
     "scheme": "vepo-rider",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "androidNavigationBar": { "visible": "sticky-immersive" },
+    "androidNavigationBar": {
+      "visible": "sticky-immersive"
+    },
     "splash": {
       "image": "./assets/images/vepo-logo.png",
       "resizeMode": "contain",
@@ -64,7 +66,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "0f065571-00fb-4f72-b338-5632baaea32c"
+      }
     }
   }
 }
