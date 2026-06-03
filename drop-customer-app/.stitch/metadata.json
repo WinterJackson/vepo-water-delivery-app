@@ -1,0 +1,26 @@
+{
+  "name": "projects/9772738851468982198",
+  "projectId": "9772738851468982198",
+  "title": "Drop Customer App",
+  "visibility": "PRIVATE",
+  "projectType": "PROJECT_DESIGN",
+  "origin": "STITCH",
+  "deviceType": "MOBILE",
+  "screens": {
+    "home_dashboard": {
+      "id": "814d59a375704714b58b16c1b7584d67",
+      "sourceScreen": "projects/9772738851468982198/screens/814d59a375704714b58b16c1b7584d67",
+      "width": 780,
+      "height": 2256
+    },
+    "home_dashboard_dark": {
+      "screen_id": "fbac773c2c87476caf70b95a9d98241e",
+      "generation_time": "2026-05-06T15:09:00Z",
+      "status": "pending_approval",
+      "dimensions": {
+        "width": 390,
+        "height": 844
+      }
+    }
+  }
+}

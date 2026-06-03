@@ -15,7 +15,7 @@ s3_client = boto3.client(
     region_name=os.getenv('AWS_REGION', 'us-east-1')
 )
 
-S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'vepo-kyc-bucket')
+S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'drop-kyc-bucket')
 
 async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
     """

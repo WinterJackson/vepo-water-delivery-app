@@ -1,5 +1,5 @@
 """
-Vepo Email Service — Resend-backed transactional emails.
+Drop Email Service — Resend-backed transactional emails.
 
 Sends welcome and approval emails. Gracefully degrades to logging
 if the Resend API key is missing or invalid (e.g. local dev / MVP).
@@ -10,7 +10,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
-EMAIL_FROM = os.getenv("EMAIL_FROM", "Vepo <onboarding@resend.dev>")
+EMAIL_FROM = os.getenv("EMAIL_FROM", "Drop <onboarding@resend.dev>")
 
 _resend_available = False
 try:
@@ -46,23 +46,23 @@ def send_welcome_email(to: str, name: str, app_type: str = "customer") -> None:
     Fire-and-forget welcome email sent during user/vendor/rider registration.
     """
     role_labels = {
-        "customer": "Welcome to Vepo! 💧",
-        "vendor": "Welcome to Vepo Vendor Portal! 🏪",
-        "rider": "Welcome to Vepo Rider Network! 🛵",
+        "customer": "Welcome to Drop! 💧",
+        "vendor": "Welcome to Drop Vendor Portal! 🏪",
+        "rider": "Welcome to Drop Rider Network! 🛵",
     }
-    subject = role_labels.get(app_type, "Welcome to Vepo!")
+    subject = role_labels.get(app_type, "Welcome to Drop!")
 
     html = f"""
     <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #f9fafb; border-radius: 12px;">
         <h1 style="color: #1e3a5f; margin-bottom: 8px;">Karibu, {name}! 🎉</h1>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            Your <strong>{app_type}</strong> account on <strong>Vepo</strong> is all set.
+            Your <strong>{app_type}</strong> account on <strong>Drop</strong> is all set.
             You can now enjoy fast, reliable water delivery across Kenya.
         </p>
         <p style="color: #6b7280; font-size: 14px; margin-top: 24px;">
             If you have any questions, just reply to this email — we're here to help.
         </p>
-        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Vepo Water Delivery</p>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Drop Water Delivery</p>
     </div>
     """
     _send(to, subject, html)
@@ -72,18 +72,18 @@ def send_vendor_approved(to: str, name: str) -> None:
     """
     Sent to a vendor after their account is auto-approved during onboarding.
     """
-    subject = "Your Vepo Vendor Account is Approved ✅"
+    subject = "Your Drop Vendor Account is Approved ✅"
     html = f"""
     <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #f0fdf4; border-radius: 12px;">
         <h1 style="color: #166534;">You're Approved, {name}! 🎉</h1>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            Great news — your vendor store is now <strong>live</strong> on Vepo.
+            Great news — your vendor store is now <strong>live</strong> on Drop.
             Customers in your area can start ordering from you immediately.
         </p>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            Open the <strong>Vepo Vendor App</strong> to manage your products, track orders, and grow your business.
+            Open the <strong>Drop Vendor App</strong> to manage your products, track orders, and grow your business.
         </p>
-        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Vepo Water Delivery</p>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Drop Water Delivery</p>
     </div>
     """
     _send(to, subject, html)
@@ -93,19 +93,19 @@ def send_rider_approved(to: str, name: str) -> None:
     """
     Sent to a rider after a vendor approves them for dedicated employment.
     """
-    subject = "You've Been Approved as a Vepo Rider! 🛵"
+    subject = "You've Been Approved as a Drop Rider! 🛵"
     html = f"""
     <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #eff6ff; border-radius: 12px;">
         <h1 style="color: #1e40af;">Congrats, {name}! 🎉</h1>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            You have been <strong>approved</strong> as an active rider on the Vepo platform.
+            You have been <strong>approved</strong> as an active rider on the Drop platform.
             You can now go online and start accepting delivery requests.
         </p>
         <p style="color: #374151; font-size: 16px; line-height: 1.6;">
-            Open the <strong>Vepo Rider App</strong>, toggle your availability to <strong>Online</strong>,
+            Open the <strong>Drop Rider App</strong>, toggle your availability to <strong>Online</strong>,
             and your first trip will appear on the Trip Radar shortly.
         </p>
-        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Vepo Water Delivery</p>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Drop Water Delivery</p>
     </div>
     """
     _send(to, subject, html)
@@ -119,7 +119,7 @@ def send_order_confirmation(to: str, name: str, order_details: dict) -> None:
     total = order_details.get("total", "0.00")
     date = order_details.get("date", "Today")
 
-    subject = f"Order #{order_id} Confirmed — Vepo 💧"
+    subject = f"Order #{order_id} Confirmed — Drop 💧"
     html = f"""
     <div style="font-family: 'Segoe UI', Helvetica, Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #f0fdf4; border-radius: 12px;">
         <h1 style="color: #166534;">Order Confirmed! ✅</h1>
@@ -141,9 +141,9 @@ def send_order_confirmation(to: str, name: str, order_details: dict) -> None:
             </tr>
         </table>
         <p style="color: #374151; font-size: 14px; line-height: 1.6;">
-            You'll receive a notification once a rider picks up your order. Track it live in the Vepo app.
+            You'll receive a notification once a rider picks up your order. Track it live in the Drop app.
         </p>
-        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Vepo Water Delivery</p>
+        <p style="color: #9ca3af; font-size: 12px; margin-top: 32px;">© Drop Water Delivery</p>
     </div>
     """
     _send(to, subject, html)

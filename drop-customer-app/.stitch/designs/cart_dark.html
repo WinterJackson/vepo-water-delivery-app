@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+                  "on-surface": "#e5e2e1",
+                  "surface-tint": "#92ccff",
+                  "secondary-container": "#06bb63",
+                  "on-background": "#e5e2e1",
+                  "on-error": "#690005",
+                  "surface-bright": "#393939",
+                  "primary-fixed-dim": "#92ccff",
+                  "primary-fixed": "#cce5ff",
+                  "on-primary-container": "#002d47",
+                  "surface-container": "#201f1f",
+                  "tertiary-fixed-dim": "#ffba4b",
+                  "primary": "#92ccff",
+                  "outline-variant": "#3f4850",
+                  "inverse-on-surface": "#313030",
+                  "on-tertiary": "#442b00",
+                  "error-container": "#93000a",
+                  "on-primary-fixed-variant": "#004b73",
+                  "surface-container-high": "#2a2a2a",
+                  "surface-container-low": "#1c1b1b",
+                  "on-secondary-container": "#00431f",
+                  "inverse-surface": "#e5e2e1",
+                  "surface-container-highest": "#353534",
+                  "on-secondary-fixed-variant": "#005228",
+                  "error": "#ffb4ab",
+                  "on-primary-fixed": "#001d31",
+                  "primary-container": "#3498db",
+                  "tertiary": "#ffba4b",
+                  "background": "#131313",
+                  "surface": "#131313",
+                  "secondary-fixed": "#6bfe9c",
+                  "secondary": "#4ae183",
+                  "on-error-container": "#ffdad6",
+                  "surface-variant": "#353534",
+                  "surface-dim": "#131313",
+                  "on-tertiary-fixed-variant": "#624000",
+                  "outline": "#89929b",
+                  "tertiary-fixed": "#ffddb1",
+                  "tertiary-container": "#c48400",
+                  "surface-container-lowest": "#0e0e0e",
+                  "secondary-fixed-dim": "#4ae183",
+                  "inverse-primary": "#006397",
+                  "on-tertiary-fixed": "#291800",
+                  "on-surface-variant": "#bfc7d2",
+                  "on-tertiary-container": "#3c2500",
+                  "on-primary": "#003351",
+                  "on-secondary-fixed": "#00210c",
+                  "on-secondary": "#003919"
+          },
+          "borderRadius": {
+                  "DEFAULT": "1rem",
+                  "lg": "2rem",
+                  "xl": "3rem",
+                  "full": "9999px"
+          },
+          "spacing": {
+                  "xl": "32px",
+                  "xs": "4px",
+                  "lg": "24px",
+                  "gutter": "16px",
+                  "sm": "8px",
+                  "md": "16px",
+                  "margin": "20px",
+                  "base": "4px"
+          },
+          "fontFamily": {
+                  "caption": ["Inter"],
+                  "body-reg": ["Inter"],
+                  "heading-md": ["Inter"],
+                  "heading-lg": ["Inter"],
+                  "body-bold": ["Inter"],
+                  "label-sm": ["Inter"]
+          },
+          "fontSize": {
+                  "caption": ["11px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "400"}],
+                  "body-reg": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400"}],
+                  "heading-md": ["20px", {"lineHeight": "28px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                  "heading-lg": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                  "body-bold": ["16px", {"lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "700"}],
+                  "label-sm": ["13px", {"lineHeight": "18px", "letterSpacing": "0.02em", "fontWeight": "500"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body { background-color: #131313; color: #e5e2e1; }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 0px; }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="font-body-reg text-body-reg min-h-screen flex flex-col pb-32">
+<!-- Top AppBar (Back to Transactional Flow logic: This page has a "Close" or "Back" feel, but since it's a main cart, we use the header) -->
+<header class="w-full top-0 px-margin pt-md flex justify-between items-center bg-background">
+<div class="flex items-center gap-md">
+<button class="w-10 h-10 flex items-center justify-center rounded-full bg-surface-container-low text-on-surface hover:opacity-80 transition-opacity">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<h1 class="font-heading-lg text-heading-lg font-bold text-primary">Your Cart</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant/30">
+<img class="w-full h-full object-cover" data-alt="A professional close-up portrait of a clean-shaven male user for a profile avatar. The lighting is soft and studio-quality against a dark, minimalist background, maintaining the high-contrast dark mode aesthetic of the Drop app. The color palette is composed of deep greys and soft skin tones with a hint of sky-blue light reflecting on the cheek." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDWsPr5Aus2Zl-fWHRaU5YO_NSENmCYXiw_PIBeeLzhZ09HFfoBpfEG9kQvG26PRIZlyrdIHITf86TQtsDUT4ePJVBStZBFe_PqCvIJ24QWgibXPuzv4SVmLYF6aC2s1I3inLhsCsnJpd9Nq1mv9ycaObcbHJoqd7mwaYHGzkhKbY112PswkBs11iWi33JE3Este_6ed3f8LVzAKda6ZMLlvOQ1scOmgcmJxysysglFjIBepUPl2p2jncrZvLqJQ3kITJLoKSNpnts"/>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 px-margin pt-lg overflow-y-auto custom-scrollbar">
+<!-- Item List -->
+<div class="flex flex-col gap-md">
+<!-- Item 1 -->
+<div class="bg-surface-container rounded-lg p-md flex items-center gap-md border border-outline-variant/10">
+<div class="w-20 h-20 bg-surface-container-highest rounded-lg overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="A premium 20-liter blue water refill bottle sitting on a clean, reflective dark surface. The bottle is backlit with a cool sky-blue neon glow, highlighting the pure liquid inside. The environment is a professional, high-end water purification facility with minimalist dark slate walls and soft atmospheric lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCm-jUPT0m8-bAkHYNFP2tiEwCp2_S40Q71ZzcY-UZLVpNIvodoSJ5HK8HvsaojTgQmx7ZJpQ6sbIduBlpfhnv12H6qkD2cwG26WGdnj8eHLPfAbWIdm-Jg1Wuaow1pjXJ-MtbgHfCrz5OozHAT63e4p3i_Ur6tElP4j1frMfMm83aXEWLjn8ljMtIuhCVxaJJxK-wS1yC5oWgvizLJjbxhK2nlI7k6UzjIR-O_t9i_hCiQVKsv5JH1U2ORly6zMb-Fjm3rKa6U388"/>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-bold text-body-bold text-on-surface">20L Refill</span>
+<span class="font-caption text-caption text-on-surface-variant">AquaPure Station</span>
+<span class="font-body-bold text-primary mt-xs">$5.50</span>
+</div>
+<div class="flex items-center gap-sm bg-surface-container-low rounded-full px-xs py-xs">
+<button class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<span class="font-body-bold text-on-surface px-sm">2</span>
+<button class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="bg-surface-container rounded-lg p-md flex items-center gap-md border border-outline-variant/10">
+<div class="w-20 h-20 bg-surface-container-highest rounded-lg overflow-hidden flex-shrink-0">
+<img class="w-full h-full object-cover" data-alt="A sleek, modern premium water dispenser bottle with a metallic cap. It is positioned as the centerpiece in a luxury office environment at night. The lighting is focused, creating sharp highlights on the smooth glass surface, with vibrant sky-blue accents in the background. The aesthetic is clean, professional, and corporate." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFTZ8WuVep_qWgaNauF01Ex_0clmk_GD77PyPSGf37gR-yQ2CTfgXFNtKkgyA0CrcVsySc77VLFNYAI5fRw9Gqzevcdn8CA48abpDU16vMBvzmEEdqPIyJtn4b_ISENLoonEXAqZfkIzcShdQTa-B7D0MN2TruEITp-bUfdwWEMcRhvdujFyPiWzVjblSSbz0UbU2PpkvOIIXL9G4-iV7bSNl_HvswvHnAU-JP6qxbS-NCbkpkBECNPxTMuK82Rhab01ycFYLSr20"/>
+</div>
+<div class="flex-1 flex flex-col">
+<span class="font-body-bold text-body-bold text-on-surface">Premium Dispenser</span>
+<span class="font-caption text-caption text-on-surface-variant">Drop Official</span>
+<span class="font-body-bold text-primary mt-xs">$45.00</span>
+</div>
+<div class="flex items-center gap-sm bg-surface-container-low rounded-full px-xs py-xs">
+<button class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center text-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">remove</span>
+</button>
+<span class="font-body-bold text-on-surface px-sm">1</span>
+<button class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-on-primary active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-[18px]">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Additional Recommendations (Bento Grid Style) -->
+<section class="mt-xl">
+<h3 class="font-heading-md text-heading-md mb-md text-on-surface">Add-ons</h3>
+<div class="grid grid-cols-2 gap-md">
+<div class="bg-surface-container-low rounded-lg p-md border border-outline-variant/5">
+<div class="w-full aspect-square bg-surface-container-highest rounded-md mb-sm overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A set of eco-friendly, crystal-clear water cups arranged neatly on a dark marble countertop. The lighting is crisp and refreshing, with sky-blue reflections dancing off the edges of the cups. This minimalist still life represents hygiene and clarity, perfectly aligning with the Drop brand identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9TE3yzvDRUHXIEg3wv4nB1OHiV2SIAdq7tydTW3w9YE-mFVEhHrICPdTu88SpYX4Mfh6SfIpiufflVPNVFPTXrbP2wJY0h41OiXiaW8Dt6qvjvquuhjofWjlTdYOj0XHJXG86tZ8zOlfIUb2Y0TmekOKmsf4e8tDk_u_yCa0NskXg6u77aQSTbi7OwxxFIrJMiKMt1KXkAqWVbVEgepIMVCT1j2mlYx0KVu967EuYYijrd4iXrED_XhG4eHFPJL9YAqkKMkanRVk"/>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface">Eco Cups (50pk)</p>
+<p class="font-body-bold text-primary">$3.00</p>
+</div>
+<div class="bg-surface-container-low rounded-lg p-md border border-outline-variant/5">
+<div class="w-full aspect-square bg-surface-container-highest rounded-md mb-sm overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small pump attachment for a large water bottle, shown in a clean, clinical setting. The product is made of matte white and sky-blue plastic, looking modern and reliable. The background is a soft, deep charcoal grey that emphasizes the professional and high-contrast look of the product." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGKmYLiwB2PELV9cgyicBJGFGBucW_5Otk-o6buusc8j3rBDW4aHlc-urmt2RIIj0kbon8xgLXYsR_KdxaPOk9Jmz4mNt5gWX63eD5SWfWHRvEknDn9X11Rrjk7mL5VZFb7_R5ujTTE6VmCBhgPuB2xxn45I2KUIIopGJbpi0J1nBbL_9eB1BzodHhe-ItxbDDvJDlXtW1VvUvOkVaHRqq3AgwH29Qr2MSNyoescwzZTlVngAyRYOT-9idVNRM16kc6H8aqQDaiWE"/>
+</div>
+<p class="font-label-sm text-label-sm text-on-surface">Manual Pump</p>
+<p class="font-body-bold text-primary">$12.00</p>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Order Summary & Checkout Section -->
+<section class="fixed bottom-32 left-0 w-full px-margin">
+<div class="bg-surface-container-high rounded-lg p-lg shadow-xl shadow-black/40 border border-outline-variant/10">
+<div class="flex flex-col gap-sm mb-md">
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-body-reg text-body-reg">Subtotal</span>
+<span class="font-body-reg text-body-reg">$56.00</span>
+</div>
+<div class="flex justify-between items-center text-on-surface-variant">
+<span class="font-body-reg text-body-reg">Delivery Fee</span>
+<span class="font-body-reg text-body-reg">$1.50</span>
+</div>
+<div class="w-full h-px bg-outline-variant/20 my-xs"></div>
+<div class="flex justify-between items-center">
+<span class="font-heading-md text-heading-md text-on-surface">Total</span>
+<span class="font-heading-lg text-heading-lg text-primary">$57.50</span>
+</div>
+</div>
+<button class="w-full py-md rounded-full bg-primary text-on-primary font-body-bold text-body-bold flex items-center justify-center gap-sm active:scale-[0.98] transition-all">
+        Checkout
+        <span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</section>
+<!-- BottomNavBar (Shared Component) -->
+<nav class="fixed bottom-lg left-1/2 -translate-x-1/2 w-[calc(100%-40px)] max-w-md z-50 flex justify-around items-center px-sm bg-surface-container rounded-full h-16 border border-outline-variant/10 shadow-lg shadow-primary/5">
+<!-- Home -->
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-highest rounded-full transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+</a>
+<!-- Search -->
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-highest rounded-full transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</a>
+<!-- Cart (Active State) -->
+<a class="flex items-center justify-center bg-primary text-on-primary rounded-full w-12 h-12 active:scale-90 transition-all duration-200" href="#">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+</a>
+<!-- Orders -->
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-highest rounded-full transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="local_shipping">local_shipping</span>
+</a>
+<!-- Profile -->
+<a class="flex items-center justify-center text-on-surface-variant w-12 h-12 hover:bg-surface-container-highest rounded-full transition-all duration-200 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+</a>
+</nav>
+</body></html>

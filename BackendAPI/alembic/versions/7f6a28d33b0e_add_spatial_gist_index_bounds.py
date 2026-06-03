@@ -149,15 +149,7 @@ def downgrade() -> None:
     op.drop_constraint('uq_user_product_favorite', 'Favorites', type_='unique')
     op.drop_index('idx_deliverer_location_gist', table_name='Deliverers', postgresql_using='gist')
     op.drop_constraint('uq_cart_product', 'Cart_Items', type_='unique')
-    op.create_table('spatial_ref_sys',
-    sa.Column('srid', sa.INTEGER(), autoincrement=False, nullable=False),
-    sa.Column('auth_name', sa.VARCHAR(length=256), autoincrement=False, nullable=True),
-    sa.Column('auth_srid', sa.INTEGER(), autoincrement=False, nullable=True),
-    sa.Column('srtext', sa.VARCHAR(length=2048), autoincrement=False, nullable=True),
-    sa.Column('proj4text', sa.VARCHAR(length=2048), autoincrement=False, nullable=True),
-    sa.CheckConstraint('srid > 0 AND srid <= 998999', name=op.f('spatial_ref_sys_srid_check')),
-    sa.PrimaryKeyConstraint('srid', name=op.f('spatial_ref_sys_pkey'))
-    )
+    # spatial_ref_sys ignored
     op.drop_index(op.f('ix_payments_order_id'), table_name='payments')
     op.drop_index(op.f('ix_payments_mpesa_receipt'), table_name='payments')
     op.drop_index(op.f('ix_payments_id'), table_name='payments')

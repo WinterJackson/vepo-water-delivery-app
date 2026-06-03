@@ -1,0 +1,236 @@
+import { UIThemeContext } from "@/context/ThemeContext";
+import { useAuth, useUser } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
+import { useQueryClient } from "@tanstack/react-query";
+import React, { useContext, useEffect, useState } from "react";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+    ActivityIndicator,
+    Image,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StatusBar,
+    Text,
+    TextInput,
+    View,
+} from "react-native";
+import { Toast } from "@/lib/toast";
+import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
+import PressableScale from "@/components/ui/PressableScale";
+import VehicleDropdown from "@/components/ui/VehicleDropdown";
+import { BRAND } from "@/constants/brandColors";
+import { Ionicons } from "@expo/vector-icons";
+import { RiderOnboardingSkeleton } from "@/components/skeletons/ContextualSkeletons";
+
+
+export default function RiderOnboarding() {
+    const { currentTheme } = useContext(UIThemeContext);
+    const darkTheme = currentTheme === "dark";
+    const { getToken, isLoaded } = useAuth();
+    const { user } = useUser();
+    const router = useRouter();
+    const queryClient = useQueryClient();
+
+    const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
+    const [missingFields, setMissingFields] = useState<string[]>([]);
+    
+    // Form States
+    const [phoneNumber, setPhoneNumber] = useState("");
+    const [idNumber, setIdNumber] = useState("");
+    const [vehicleType, setVehicleType] = useState("motorbike");
+    const [plateNumber, setPlateNumber] = useState("");
+
+    useEffect(() => {
+        const checkStatus = async () => {
+            try {
+                const token = await getToken();
+                const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_BASE_URL ?? "";
+                const res = await fetch(`${BASE_URL}/api/auth/profile-status?app_type=rider`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!data.exists || (data.missing_fields && data.missing_fields.length > 0)) {
+                        setMissingFields(data.missing_fields);
+                    } else {
+                        router.replace("/(screens)");
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to check profile status", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        if (isLoaded) {
+            checkStatus();
+        }
+    }, [isLoaded]);
+
+    const handleSubmit = async () => {
+        if (missingFields.includes("phone_number") && (!phoneNumber || phoneNumber.length < 9)) {
+            return Toast.error("Required", "Please enter a valid phone number");
+        }
+        if (missingFields.includes("ID_number") && !idNumber) {
+            return Toast.error("Required", "Please enter your National ID");
+        }
+        const needsVehicle = missingFields.includes("vehicle_type") || missingFields.includes("plate_number");
+        if (needsVehicle && !plateNumber) {
+            return Toast.error("Required", "Please enter your Vehicle License Plate");
+        }
+
+        setSubmitting(true);
+        try {
+            const token = await getToken();
+            const payload: any = {
+                clerk_id: user?.id,
+                name: user?.fullName || "Rider",
+                email: user?.emailAddresses[0]?.emailAddress || "",
+                profile_pic: user?.imageUrl || ""
+            };
+
+            if (phoneNumber) payload.phone_number = phoneNumber;
+            if (idNumber) payload.ID_number = idNumber;
+            if (needsVehicle) {
+                payload.vehicle_type = vehicleType;
+                payload.plate_number = plateNumber;
+            }
+
+            const res = await fetch(RiderApiRoutes.Register.path, {
+                method: "POST",
+                headers: { 
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                Toast.success("Success", "Welcome to Drop Riders!");
+                queryClient.invalidateQueries({ queryKey: ['rider'] });
+                router.replace("/(screens)");
+            } else {
+                const errorData = await res.json();
+                Toast.error("Error", errorData?.detail || "Registration failed");
+            }
+        } catch (error) {
+            Toast.error("Error", "Network error occurred");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : "bg-white"}`}>
+                <StatusBar barStyle={darkTheme ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+                <RiderOnboardingSkeleton />
+            </SafeAreaView>
+        );
+    }
+
+    return (
+        <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : "bg-white"}`}>
+            <StatusBar
+                barStyle={darkTheme ? "light-content" : "dark-content"}
+                backgroundColor="transparent"
+                translucent
+            />
+            <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                className="flex-1"
+            >
+                <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+                    
+                    <View className="mt-8 mb-6 items-center">
+                        <Text className={`text-3xl text-center font-bold mb-3 ${darkTheme ? "text-white" : "text-black"}`}>
+                            Rider Registration
+                        </Text>
+                        <Text className={`mt-3 text-center ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                            Complete your rider profile to start delivering orders.
+                        </Text>
+                    </View>
+
+                    <View className="gap-5">
+                        {missingFields.includes("ID_number") && (
+                            <View className={`p-5 rounded-3xl ${darkTheme ? "bg-white/5" : "bg-white border border-gray-100"}`}>
+                                <Text className={`text-base font-bold mb-3 ${darkTheme ? "text-white" : "text-gray-800"}`}>
+                                    National ID Number
+                                </Text>
+                                <TextInput
+                                    className={`h-[55px] px-4 rounded-2xl text-base ${darkTheme ? "bg-black text-white border border-white/20" : "bg-white text-black border border-gray-200"}`}
+                                    placeholder="e.g. 12345678"
+                                    placeholderTextColor={darkTheme ? "#888" : "#A0AEC0"}
+                                    keyboardType="number-pad"
+                                    value={idNumber}
+                                    onChangeText={setIdNumber}
+                                />
+                            </View>
+                        )}
+
+                        {missingFields.includes("phone_number") && (
+                            <View className={`p-5 rounded-3xl ${darkTheme ? "bg-white/5" : "bg-white border border-gray-100"}`}>
+                                <Text className={`text-base font-bold mb-3 ${darkTheme ? "text-white" : "text-gray-800"}`}>
+                                    Phone Number
+                                </Text>
+                                <View className={`flex-row items-center h-[55px] rounded-2xl px-4 ${darkTheme ? "bg-black border border-white/20" : "bg-white border border-gray-200"}`}>
+                                    <Ionicons name="call" size={24} color={BRAND.primary} />
+                                    <Text className={`ml-3 mr-1 font-bold ${darkTheme ? "text-gray-300" : "text-gray-600"}`}>+254</Text>
+                                    <TextInput
+                                        className={`flex-1 h-full ml-1 text-base ${darkTheme ? "text-white" : "text-black"}`}
+                                        placeholder="712345678"
+                                        placeholderTextColor={darkTheme ? "#888" : "#A0AEC0"}
+                                        keyboardType="phone-pad"
+                                        value={phoneNumber}
+                                        onChangeText={setPhoneNumber}
+                                        maxLength={10}
+                                    />
+                                </View>
+                            </View>
+                        )}
+
+                        {(missingFields.includes("vehicle_type") || missingFields.includes("plate_number")) && (
+                            <View className={`p-5 rounded-3xl ${darkTheme ? "bg-white/5" : "bg-white border border-gray-100"}`}>
+                                <Text className={`text-base font-bold mb-3 ${darkTheme ? "text-white" : "text-gray-800"}`}>
+                                    Vehicle Details
+                                </Text>
+                                <View className="mb-4">
+                                    <VehicleDropdown
+                                        label=""
+                                        value={vehicleType}
+                                        onValueChange={setVehicleType}
+                                        style="w-full max-w-full"
+                                    />
+                                </View>
+                                
+                                    <TextInput
+                                        className={`h-[55px] px-4 rounded-2xl text-base ${darkTheme ? "bg-black text-white border border-white/20" : "bg-white text-black border border-gray-200"}`}
+                                        placeholder="License Plate (e.g. KCA 123A)"
+                                        placeholderTextColor={darkTheme ? "#888" : "#A0AEC0"}
+                                        autoCapitalize="characters"
+                                        value={plateNumber}
+                                        onChangeText={setPlateNumber}
+                                    />
+                            </View>
+                        )}
+                    </View>
+
+                    <PressableScale
+                        onPress={handleSubmit}
+                        disabled={submitting}
+                        className={`mt-10 h-[55px] rounded-full items-center justify-center ${submitting ? "bg-accentbg/50" : "bg-accentbg"}`}
+                    >
+                        {submitting ? (
+                            <ActivityIndicator color={BRAND.white} />
+                        ) : (
+                            <Text className="text-white font-bold text-lg">Complete Registration</Text>
+                        )}
+                    </PressableScale>
+
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
+}

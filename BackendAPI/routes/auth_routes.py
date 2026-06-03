@@ -275,7 +275,7 @@ async def delete_account(
 
         # Anonymize PII
         db_user.full_name = "Deleted User"
-        db_user.email = f"deleted_{db_user.id}@vepo.local"
+        db_user.email = f"deleted_{db_user.id}@drop.local"
         db_user.phone_number = None
         db_user.profile_pic = None
         db_user.clerk_id = f"deleted_{db_user.id}"
@@ -305,7 +305,7 @@ async def delete_account(
         # Anonymize PII
         db_vendor.owners_name = "Deleted Vendor"
         db_vendor.business_name = "Deleted Store"
-        db_vendor.email = f"deleted_{db_vendor.id}@vepo.local"
+        db_vendor.email = f"deleted_{db_vendor.id}@drop.local"
         db_vendor.phone_number = None
         db_vendor.profile_pic = None
         db_vendor.clerk_id = f"deleted_{db_vendor.id}"
@@ -334,7 +334,7 @@ async def delete_account(
 
         # Anonymize PII
         db_rider.name = "Deleted Rider"
-        db_rider.email = f"deleted_{db_rider.id}@vepo.local"
+        db_rider.email = f"deleted_{db_rider.id}@drop.local"
         db_rider.phone_number = None
         db_rider.profile_pic = None
         db_rider.clerk_id = f"deleted_{db_rider.id}"

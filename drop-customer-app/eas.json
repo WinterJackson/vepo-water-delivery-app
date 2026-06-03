@@ -1,0 +1,50 @@
+{
+  "cli": {
+    "version": ">= 16.1.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "android": {
+        "buildType": "apk",
+        "distribution": "internal"
+      }
+    },
+    "preview2": {
+      "android": {
+        "gradleCommand": ":app:assembleRelease",
+        "distribution": "internal"
+      }
+    },
+    "preview3": {
+      "android": {
+        "buildType": "apk",
+        "distribution": "internal"
+      },
+      "env": {
+        "EXPO_PUBLIC_BACKEND_BASE_URL" : "https://multivendor-water-delivery-app.onrender.com",
+        "EXPO_PUBLIC_AUTHORIZED_REDIRECT_URI" : "https://clerk.drop.com/v1/oauth_callback"
+      }
+    },
+    "preview4": {
+      "distribution": "internal"
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_test_cGV0LWFpcmVkYWxlLTIyLmNsZXJrLmFjY291bnRzLmRldiQ",
+        "EXPO_PUBLIC_BACKEND_BASE_URL": "https://multivendor-water-delivery-app.onrender.com",
+        "EXPO_PUBLIC_GOOGLE_MAPS_KEY": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

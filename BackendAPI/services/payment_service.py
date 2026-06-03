@@ -49,7 +49,7 @@ async def initiate_stk_push(phone: str, amount: int):
         "Content-Type": "application/json"
     }
 
-    platform_name = os.getenv("PLATFORM_NAME", "Vepo")
+    platform_name = os.getenv("PLATFORM_NAME", "Drop")
     payload = {
         "BusinessShortCode": os.getenv("MPESA_SHORTCODE"),
         "Password": password,
@@ -183,7 +183,7 @@ async def initiate_b2c_payout(phone: str, amount: float, payout_id: str) -> dict
         "Content-Type": "application/json",
     }
 
-    platform_name = os.getenv("PLATFORM_NAME", "Vepo")
+    platform_name = os.getenv("PLATFORM_NAME", "Drop")
     payload = {
         "InitiatorName": os.getenv("MPESA_B2C_INITIATOR", "testapi"),
         "SecurityCredential": os.getenv("MPESA_B2C_PASSWORD", ""),
@@ -259,7 +259,7 @@ async def initiate_mpesa_reversal(
         "Amount": int(amount),
         "ReceiverParty": shortcode,
         "RecieverIdentifierType": "11",  # Shortcode identifier
-        "Remarks": f"Vepo refund for {transaction_id}",
+        "Remarks": f"Drop refund for {transaction_id}",
         "QueueTimeOutURL": os.getenv("MPESA_REVERSAL_TIMEOUT_URL", os.getenv("MPESA_B2C_TIMEOUT_URL", "")),
         "ResultURL": os.getenv("MPESA_REVERSAL_RESULT_URL", os.getenv("MPESA_B2C_RESULT_URL", "")),
         "Occasion": f"refund_{transaction_id}",

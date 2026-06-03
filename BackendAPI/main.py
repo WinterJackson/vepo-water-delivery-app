@@ -40,7 +40,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Vepo Water Delivery API", version="1.0.0")
+app = FastAPI(title="Drop Water Delivery API", version="1.0.0")
 
 # --- F-011 FIX: Health Check Endpoint ---
 @app.get("/health", tags=["Health"])
@@ -51,8 +51,8 @@ async def health_check():
 async def get_app_version():
     return {
         "min_version": "1.0.0",
-        "ios_store_url": "https://apps.apple.com/app/vepo/id123456789",
-        "android_store_url": "https://play.google.com/store/apps/details?id=com.vepo.app"
+        "ios_store_url": "https://apps.apple.com/app/drop/id123456789",
+        "android_store_url": "https://play.google.com/store/apps/details?id=com.drop.app"
     }
 
 # --- F-012 FIX: Global Exception Handler (prevents stack trace leaks) ---
