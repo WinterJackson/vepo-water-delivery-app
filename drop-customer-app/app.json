@@ -39,7 +39,6 @@
           "apiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
         }
       },
-      "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
