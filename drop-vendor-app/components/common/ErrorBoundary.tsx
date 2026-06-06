@@ -2,7 +2,30 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { PressableScale } from "@/components/ui/PressableScale";
 import { ERROR_BOUNDARY, BRAND } from '@/constants/brandColors';
+import { UIThemeContext } from '@/context/ThemeContext';
 
+const ErrorFallbackUI = ({ error, resetCount, maxResets, onReset }: any) => {
+  const { currentTheme } = React.useContext(UIThemeContext);
+  const isDark = currentTheme === "dark";
+
+  return (
+    <View style={[styles.container, { backgroundColor: isDark ? ERROR_BOUNDARY.bgDark : ERROR_BOUNDARY.bgLight }]}>
+      <Text style={[styles.title, { color: isDark ? BRAND.white : BRAND.textDark }]}>Something went wrong</Text>
+      <Text style={[styles.message, { color: isDark ? ERROR_BOUNDARY.subTextDark : ERROR_BOUNDARY.subTextLight }]} numberOfLines={3}>
+        {error?.message ?? 'An unexpected error occurred.'}
+      </Text>
+      {resetCount < maxResets ? (
+        <PressableScale style={styles.button} onPress={onReset}>
+          <Text style={styles.buttonText}>Try Again</Text>
+        </PressableScale>
+      ) : (
+        <Text style={styles.crashLimit}>
+          The app has crashed multiple times. Please restart the application.
+        </Text>
+      )}
+    </View>
+  );
+};
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
@@ -21,6 +44,8 @@ interface ErrorBoundaryProps {
  * Usage: <ErrorBoundary><NavigatorComponent /></ErrorBoundary>
  */
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  static MAX_RESETS = 3;
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null, resetCount: 0 };
@@ -31,13 +56,19 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Log to your monitoring service here (e.g. Sentry)
-    if (__DEV__) console.error('[ErrorBoundary] Caught error:', error.message, info.componentStack);
+    if (__DEV__) {
+      console.error('[ErrorBoundary] Caught error:', error.message, info.componentStack);
+    }
+    // TODO: In production, report to Sentry/Crashlytics:
+    // Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
   }
 
   handleReset = () => {
-    if (this.state.resetCount >= 3) return;
-    this.setState((prev) => ({ hasError: false, error: null, resetCount: prev.resetCount + 1 }));
+    this.setState((prev) => ({
+      hasError: false,
+      error: null,
+      resetCount: prev.resetCount + 1,
+    }));
     this.props.onReset?.();
   };
 
@@ -46,21 +77,12 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       if (this.props.fallback) return this.props.fallback;
 
       return (
-        <View style={styles.container}>
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message} numberOfLines={3}>
-            {this.state.error?.message ?? 'An unexpected error occurred.'}
-          </Text>
-          <PressableScale 
-            style={[styles.button, this.state.resetCount >= 3 && { opacity: 0.5 }]} 
-            onPress={this.handleReset}
-            disabled={this.state.resetCount >= 3}
-          >
-            <Text style={styles.buttonText}>
-                {this.state.resetCount >= 3 ? "Please Restart App" : "Try Again"}
-            </Text>
-          </PressableScale>
-        </View>
+        <ErrorFallbackUI 
+          error={this.state.error}
+          resetCount={this.state.resetCount}
+          maxResets={ErrorBoundary.MAX_RESETS}
+          onReset={this.handleReset}
+        />
       );
     }
 
@@ -74,18 +96,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 24,
-    backgroundColor: ERROR_BOUNDARY.bgDark,
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: ERROR_BOUNDARY.textDark,
     marginBottom: 12,
     textAlign: 'center',
   },
   message: {
     fontSize: 14,
-    color: ERROR_BOUNDARY.textDark,
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
@@ -97,9 +116,16 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   buttonText: {
-    color: ERROR_BOUNDARY.textDark,
+    color: BRAND.white,
     fontSize: 16,
     fontWeight: '600',
+  },
+  crashLimit: {
+    color: '#EF4444',
+    fontSize: 14,
+    textAlign: 'center' as const,
+    marginTop: 8,
+    lineHeight: 20,
   },
 });
 
