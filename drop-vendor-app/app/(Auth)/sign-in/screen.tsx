@@ -14,7 +14,7 @@ import { ClerkAPIError } from "@clerk/types";
 import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 
-import { Link, useRouter } from "expo-router";
+import { Link, useRouter, useFocusEffect } from "expo-router";
 import React, {
     useCallback,
     useContext,
@@ -49,11 +49,13 @@ export default function SignIn() {
 
 	const darkTheme = currentTheme === "dark";
 
-	useEffect(() => {
-		if (isLoaded && isSignedIn) {
-			router.replace("/");
-		}
-	}, [isLoaded, isSignedIn]);
+	useFocusEffect(
+		useCallback(() => {
+			if (isLoaded && isSignedIn) {
+				router.replace("/");
+			}
+		}, [isLoaded, isSignedIn])
+	);
 
 
 	// <-----------------------<STATES>------------------------>

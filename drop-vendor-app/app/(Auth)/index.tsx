@@ -1,5 +1,11 @@
-import { Redirect } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback } from "react";
 
 export default function AuthIndex() {
-  return <Redirect href={"/(Auth)/sign-in/screen" as any} />;
+  useFocusEffect(
+    useCallback(() => {
+      router.replace("/(Auth)/sign-in/screen");
+    }, [])
+  );
+  return null;
 }

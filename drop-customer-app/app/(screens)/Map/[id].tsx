@@ -944,7 +944,7 @@ const initialRegion : any = {
 		);
 	}
 
-	if (!User) {
+	if (!User && !isModeSetLocation) {
 		return (
 			<DataFallbackUI 
 				title="User data unavailable"

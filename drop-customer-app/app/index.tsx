@@ -72,12 +72,12 @@ export default function Index() {
 						setReadyToRoute("main");
 					}
 				} else {
-					// Backend returned error — let user through rather than blocking them
-					setReadyToRoute("main");
+					// Backend returned error - safer to route to onboarding where user creation happens
+					setReadyToRoute("onboarding");
 				}
 			} catch (e) {
-				// Network failure — don't trap user in onboarding loop
-				setReadyToRoute("main");
+				// Network failure - safer to route to onboarding where user creation happens
+				setReadyToRoute("onboarding");
 			} finally {
 				setIsVerifyingProfile(false);
 			}

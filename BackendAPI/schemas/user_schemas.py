@@ -19,6 +19,11 @@ class BasicUser(BaseUser):
     id: UUID
     bottle_purchased_at: str | None = None
     bottle_refill_count: int | None = 0
+    wallet_balance: float | None = 0.0
+    floor_level: int | None = 0
+    has_elevator: bool | None = False
+    preferences: dict | None = None
+    payment_methods: list | None = None
     
     model_config = {"from_attributes": True}
 

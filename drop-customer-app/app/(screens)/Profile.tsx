@@ -202,11 +202,11 @@ const Profile = () => {
 						{/* <-------PROFILE DETAILS: [ PROFILE_PIC , USERNAME , EMAIL , EDIT_PROFILE_BUTTON ]-------> */}
 						<View className="w-full items-center pt-3 pb-5 gap-2">
 							{/* Cashback Banner */}
-							{User?.cashback_balance !== undefined && User?.cashback_balance > 0 && (
+							{User?.wallet_balance !== undefined && User?.wallet_balance > 0 && (
 								<View className={`flex-row items-center px-4 py-2 rounded-full mb-2 border ${darkTheme ? "bg-green-500/20 border-green-500/30" : "bg-green-50 border-green-200"}`}>
 									<Text style={{ fontSize: 18, marginRight: 6 }}>💸</Text>
 									<Text className="font-bold text-sm" style={{ color: BRAND_TOAST.success }}>
-										Drop Cashback: KSh {User.cashback_balance.toLocaleString()}
+										Drop Cashback: KSh {User.wallet_balance.toLocaleString()}
 									</Text>
 								</View>
 							)}

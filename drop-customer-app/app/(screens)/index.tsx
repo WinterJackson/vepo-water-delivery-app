@@ -243,7 +243,7 @@ export default function Home() {
 
 						<View className="flex-row items-center gap-3">
 							{/* Drop Cashback Pill */}
-							{User?.cashback_balance !== undefined && User?.cashback_balance > 0 && (
+							{User?.wallet_balance !== undefined && User?.wallet_balance > 0 && (
 								<PressableScale
 									activeOpacity={0.6}
 									onPress={() => router.push("/(screens)/Profile")}
@@ -251,7 +251,7 @@ export default function Home() {
 									<View className={`flex-row items-center px-2.5 py-1.5 rounded-full border ${darkTheme ? "bg-blue-500/20 border-blue-500/30" : "bg-blue-50 border-blue-200"}`}>
 										<Ionicons name="wallet-outline" size={14} color={BRAND.primary} />
 										<Text className="ml-1 font-bold text-xs" style={{ color: BRAND.primary }}>
-											KSh {User.cashback_balance.toLocaleString()}
+											KSh {User.wallet_balance.toLocaleString()}
 										</Text>
 									</View>
 								</PressableScale>
