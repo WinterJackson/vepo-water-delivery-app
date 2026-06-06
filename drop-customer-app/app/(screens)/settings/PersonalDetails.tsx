@@ -11,6 +11,7 @@ import { useUser } from "@clerk/clerk-expo";
 import { Toast } from "@/lib/toast";
 import { PressableScale } from "@/components/ui/PressableScale";
 import { BRAND } from "@/constants/brandColors";
+import { InputFieldProps } from "@/types/components";
 
 export default function PersonalDetails() {
     const { currentTheme } = useContext(UIThemeContext);
@@ -55,15 +56,15 @@ export default function PersonalDetails() {
                 has_elevator: hasElevator
             });
             Toast.success("Saved", "Your details have been updated.");
-        } catch (error: any) {
-            Toast.error("Update Failed", error.message || "Network error.");
+        } catch (error: unknown) {
+            Toast.error("Update Failed", (error as Error).message || "Network error.");
         } finally {
             setIsSaving(false);
         }
     };
 
 
-    const InputField = ({ label, value, onChangeText, keyboardType = "default" as any, editable = true, maxLength }: any) => (
+    const InputField = ({ label, value, onChangeText = () => {}, keyboardType = "default", editable = true, maxLength }: InputFieldProps) => (
         <View className="mb-5">
             <Text className={`font-semibold mb-2 text-sm ${darkTheme ? "text-gray-300" : "text-gray-700"}`}>
                 {label}
@@ -109,7 +110,7 @@ export default function PersonalDetails() {
                 keyboardShouldPersistTaps="handled"
             >
                 <InputField label="Full Name" value={name} onChangeText={setName} maxLength={50} />
-                <InputField label="Email Address" value={User?.email || user?.emailAddresses?.[0]?.emailAddress || ""} editable={false} />
+                <InputField label="Email Address" value={User?.email || user?.emailAddresses?.[0]?.emailAddress || ""} onChangeText={() => {}} editable={false} />
                 <InputField label="Phone Number" value={phone} onChangeText={setPhone} keyboardType="phone-pad" maxLength={15} />
 
                 {/* ── Address Anti-Fraud Details ── */}

@@ -38,10 +38,10 @@ export default function VendorDirectory() {
         if (!vendors) return [];
         let result = vendors;
         if (filter !== 'all') {
-            result = result.filter((v: any) => v.vendor_type === filter);
+            result = result.filter((v: import("@/types/models").Vendor) => v.vendor_type === filter);
         }
         if (searchQuery.trim()) {
-            result = result.filter((v: any) => v.business_name.toLowerCase().includes(searchQuery.toLowerCase()));
+            result = result.filter((v: import("@/types/models").Vendor) => v.business_name.toLowerCase().includes(searchQuery.toLowerCase()));
         }
         return result;
     }, [vendors, filter, searchQuery]);
@@ -141,7 +141,7 @@ export default function VendorDirectory() {
                         />
                     )}
                     {/* Vendor Markers */}
-                    {filteredVendors.map((vendor: any) => {
+                    {filteredVendors.map((vendor: import("@/types/models").Vendor) => {
                         if (!vendor.lat || !vendor.lng) return null;
                         return (
                             <Marker

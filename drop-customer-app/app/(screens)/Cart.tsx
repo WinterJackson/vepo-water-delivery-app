@@ -211,8 +211,8 @@ export default function Cart() {
 			setPaymentLoading(false)
 			nextPage()
 			setModalPage(3)
-		} catch (error: any) {
-			if (__DEV__) console.error("Checkout error:", error?.message);
+		} catch (error: unknown) {
+			if (__DEV__) console.error("Checkout error:", (error as Error)?.message);
 			Toast.error("Network Error", "Could not reach payment server.");
 			setPaymentLoading(false)
 		}
@@ -255,8 +255,8 @@ export default function Cart() {
 				// Auto-poll: let the interval continue retrying
 				setConfirmPaymentLoading(false)
 			}
-		} catch (error: any) {
-			if (__DEV__) console.error("Confirm error:", error?.message);
+		} catch (error: unknown) {
+			if (__DEV__) console.error("Confirm error:", (error as Error)?.message);
 			if (isManualConfirm) {
 				Toast.error("Verification Failed", "Could not verify payment.");
 				if (pollingTimeoutRef.current) clearTimeout(pollingTimeoutRef.current);

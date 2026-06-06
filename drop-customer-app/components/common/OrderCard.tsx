@@ -101,8 +101,8 @@ const OrderCard = React.memo(({ order }: Props) => {
       onSuccess: () => {
         Toast.success("Success", "Order cancelled successfully");
       },
-      onError: (error: any) => {
-        Toast.error("Error", error.message || "Failed to cancel order");
+      onError: (error: Error) => {
+        Toast.error("Error", (error as Error).message || "Failed to cancel order");
       }
     });
   };
@@ -128,11 +128,11 @@ const OrderCard = React.memo(({ order }: Props) => {
       }
       Toast.success("Cart Updated", "Items accurately re-added to your cart!");
       router.push("/(screens)/Cart");
-    } catch (e: any) {
-      if (e?.type === "vendor_conflict") {
+    } catch (e: unknown) {
+      if ((e as {type?: string})?.type === "vendor_conflict") {
         Popup.show({
           title: "Replace Cart?",
-          message: `Your cart has items from ${e.existing_vendor}. Re-ordering will replace your current cart.`,
+          message: `Your cart has items from ${(e as {existing_vendor?: string}).existing_vendor}. Re-ordering will replace your current cart.`,
           cancelText: "Cancel",
           confirmText: "Replace & Reorder",
           isDestructive: true,

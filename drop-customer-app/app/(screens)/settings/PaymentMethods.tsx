@@ -49,8 +49,8 @@ export default function PaymentMethods() {
             Toast.success("Added", "Payment method added.");
             setIsAdding(false);
             setNewPhone("");
-        } catch (error: any) {
-            Toast.error("Error", error.message || "Failed to add.");
+        } catch (error: unknown) {
+            Toast.error("Error", (error as Error).message || "Failed to add.");
         } finally {
             setIsSaving(false);
         }
@@ -74,8 +74,8 @@ export default function PaymentMethods() {
                 try {
                     await updateUserMutation.mutateAsync({ payment_methods: newMethods });
                     Toast.success("Removed", "Payment method removed.");
-                } catch (error: any) {
-                    Toast.error("Error", error.message || "Failed to remove.");
+                } catch (error: unknown) {
+                    Toast.error("Error", (error as Error).message || "Failed to remove.");
                 } finally {
                     Popup.hide();
                 }

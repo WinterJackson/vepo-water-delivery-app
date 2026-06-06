@@ -34,7 +34,7 @@ export function useNotifications() {
         },
         refetchInterval: 30000, // Poll every 30 seconds for new notifications
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });
@@ -97,7 +97,7 @@ export function useUnreadNotificationCount() {
         },
         refetchInterval: 30000,
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });

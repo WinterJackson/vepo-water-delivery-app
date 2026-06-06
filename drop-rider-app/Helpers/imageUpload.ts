@@ -39,7 +39,7 @@ const CloudinaryUpload = async (uri: string, name: string | null | undefined) =>
 
     const data = await res.json();
     return data;
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (__DEV__) console.error('Cloudinary upload error:', err);
     Toast.error('Upload Error', 'Failed to upload proof photo. Please try again.');
     throw err;

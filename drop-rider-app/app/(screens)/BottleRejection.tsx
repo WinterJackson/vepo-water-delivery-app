@@ -105,8 +105,8 @@ export default function BottleRejection() {
         const errData = await res.json();
         Toast.error("Error", errData.detail || "Submission failed");
       }
-    } catch (e: any) {
-       Toast.error("Error", e.message || "Network Error");
+    } catch (e: unknown) {
+       Toast.error("Error", (e as Error).message || "Network Error");
     } finally {
        setIsSubmitting(false);
     }

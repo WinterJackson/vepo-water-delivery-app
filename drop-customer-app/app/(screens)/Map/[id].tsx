@@ -21,10 +21,10 @@ import { DataFallbackUI } from "@/components/ui/DataFallbackUI";
 let MapView: any = null;
 let Marker: any = null;
 let MarkerAnimated: any = null;
-let GestureHandlerRootView: any = null;
-let Region: any = null; // Add Region to the declarations
+let GestureHandlerRootView: React.ComponentType<any> | null = null;
+let Region: any = null; // intentional any for react-native-maps // Add Region to the declarations
 let UrlTile: any = null;
-let PROVIDER_GOOGLE: any = null;
+let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== 'web') {
     // Import native-only modules only when not on web
@@ -489,7 +489,7 @@ const darkMapStyle = [
   }
 ]
 
-const standardMapStyle : any = []
+const standardMapStyle: any[] = []
 
 type Vendor = {
 	id: string;
@@ -575,7 +575,7 @@ export default function Maps() {
 	// 	router.push("/(screens)")
 	// }
 
-const initialRegion : any = {
+const initialRegion: import("@/types/models").MapRegion = {
         latitude: pathLat, 
         longitude: pathlng,
         latitudeDelta: 0.015,
@@ -684,7 +684,7 @@ const initialRegion : any = {
 				Toast.success("Location Updated", `Delivering to ${addressStr}`);
 				// Optimistically update the UI cache (flat shape matches BasicUser from API)
 				await queryClient.cancelQueries({ queryKey: ['user', 'details'] });
-				queryClient.setQueryData(['user', 'details'], (old: any) => {
+				queryClient.setQueryData(['user', 'details'], (old: import("@/types/models").BasicUser | undefined) => {
 					if (!old) return old;
 					return {
 						...old,
@@ -787,7 +787,7 @@ const initialRegion : any = {
             }
         }
         const convertToClusterPoints = (vendors: any) => {
-            const vendorArray = Array.isArray(vendors) ? vendors : (vendors?.data || []);
+            const vendorArray = Array.isArray(vendors) ? vendors : ((vendors as any)?.data || []);
             return vendorArray.map((vendor: Vendor) => ({
                 type: "Feature",
                 geometry: {
@@ -807,7 +807,7 @@ const initialRegion : any = {
     }, [allVendors, pathid]);
 
 	// MAP MARKERS CALLBACK
-	const renderClusterMarker = useCallback((item: any) => {
+	const renderClusterMarker = useCallback((item: import("@/types/models").GeoJSONFeature) => {
 		return (
 			<Marker
 				key={`cluster-${item.properties.cluster_id}`}
@@ -828,7 +828,7 @@ const initialRegion : any = {
 		);
 	}, []);
 
-	const renderSingleMarker = useCallback((item: any) => {
+	const renderSingleMarker = useCallback((item: import("@/types/models").GeoJSONFeature) => {
 		return (
 			<Marker
 				key={item.properties.id}
@@ -981,7 +981,7 @@ const initialRegion : any = {
 											// Uncomment this block for Production:
 											// provider={PROVIDER_GOOGLE}
 											style={StyleSheet.absoluteFill}
-											onRegionChangeComplete={(region: any) => {
+											onRegionChangeComplete={(region: import("@/types/models").MapRegion) => {
 												setRegion(region);
 												if (dataShown === "setLocation") {
 													setCurrentMapCenter(region);
@@ -1001,7 +1001,7 @@ const initialRegion : any = {
 											{UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
 
 											{
-												markers.map((item: any) => 
+												markers.map((item: import("@/types/models").GeoJSONFeature) => 
 													item.properties.cluster
 														? renderClusterMarker(item)
 														: renderSingleMarker(item)
@@ -1227,7 +1227,7 @@ const initialRegion : any = {
 											{savedLocations.length > 0 && (
 												<View className="gap-2">
 													<Text className={`text-xs font-semibold uppercase tracking-wider ${darkTheme ? "text-gray-500" : "text-gray-400"}`}>Saved Locations</Text>
-													{savedLocations.slice(0, 4).map((loc: any) => (
+													{savedLocations.slice(0, 4).map((loc: import("@/types/models").SavedLocation) => (
 														<PressableScale
 															key={loc.id}
 															onPress={async () => {
@@ -1236,8 +1236,8 @@ const initialRegion : any = {
 																	queryClient.invalidateQueries({ queryKey: ['user', 'details'] });
 																	Toast.success("Location Updated", `Delivering to ${loc.address}`);
 																	router.back();
-																} catch (e: any) {
-																	Toast.error("Error", e.message || "Could not select location");
+																} catch (e: unknown) {
+																	Toast.error("Error", (e as Error).message || "Could not select location");
 																}
 															}}
 														>
@@ -1334,7 +1334,7 @@ const initialRegion : any = {
 												</View>
 											</View>
 											<View className={`gap-3`}>
-												{orders && orders.filter((o: any) => o.order_id !== activeSession?.order_id).map((order: any, idx: number) => (
+												{orders && orders.filter((o: import("@/types/models").Order) => o.order_id !== activeSession?.order_id).map((order: import("@/types/models").Order, idx: number) => (
 													<OrderListItem key={idx} data={order} />
 												))}
 												{(!orders || orders.length === 0) && (

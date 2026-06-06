@@ -77,15 +77,15 @@ export default function Orders() {
     if (__DEV__) console.log('Received order update via WebSocket:', updateData);
     if (updateData?.action === "TRIP_RADAR_BROADCAST") {
         setRadarOrders(prev => {
-            const exists = prev.find(o => o.order_id === updateData.order_id);
+            const exists = prev.find(o => o.id === updateData.order_id);
             if (exists) return prev;
             return [updateData, ...prev];
         });
     } else if (updateData?.action === "ORDER_ASSIGNED") {
-        setRadarOrders(prev => prev.filter(o => o.order_id !== updateData.order_id));
+        setRadarOrders(prev => prev.filter(o => o.id !== updateData.order_id));
         fetchOrders(); // Pull the newly locked order if it was assigned to us
     } else if (updateData?.action === "ORDER_STATUS_UPDATE" && updateData.status === "cancelled") {
-        setRadarOrders(prev => prev.filter(o => o.order_id !== updateData.order_id));
+        setRadarOrders(prev => prev.filter(o => o.id !== updateData.order_id));
         fetchOrders();
     } else {
         fetchOrders();
@@ -137,14 +137,14 @@ export default function Orders() {
       const data = await res.json();
       if (!res.ok) {
         Toast.error("Radar Update", data.detail || "Failed to claim order");
-        setRadarOrders(prev => prev.filter(o => o.order_id !== orderId));
+        setRadarOrders(prev => prev.filter(o => o.id !== orderId));
       } else {
         Toast.success("Success", "Delivery claimed successfully!");
-        setRadarOrders(prev => prev.filter(o => o.order_id !== orderId));
+        setRadarOrders(prev => prev.filter(o => o.id !== orderId));
         fetchOrders();
       }
-    } catch (e: any) {
-      Toast.error("Error", e.message || "Network error");
+    } catch (e: unknown) {
+      Toast.error("Error", (e as Error).message || "Network error");
     } finally {
       setClaimingOrder(null);
     }
@@ -163,8 +163,8 @@ export default function Orders() {
              await rejectDelivery(orderId);
              setOrders(orders.filter(o => o.id !== orderId));
              Toast.success("Rejected", "Delivery reassigned.");
-           } catch (e: any) {
-             Toast.error("Error", e.message || "Failed to reject delivery");
+           } catch (e: unknown) {
+             Toast.error("Error", (e as Error).message || "Failed to reject delivery");
            }
         }
     });

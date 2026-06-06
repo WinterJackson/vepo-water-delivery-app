@@ -39,14 +39,14 @@ export default function NotificationPreferences() {
         setPreferences(newPrefs);
         try {
             await updateUserMutation.mutateAsync({ preferences: newPrefs });
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Revert on failure
             setPreferences(preferences);
             Toast.error("Update Failed", "Could not save your preferences.");
         }
     };
 
-    const ToggleItem = ({ title, description, prefKey }: any) => (
+    const ToggleItem = ({ title, description, prefKey }: { title: string, description: string, prefKey: string }) => (
         <View 
             className={`flex-row justify-between items-center p-4 mb-3 rounded-2xl border ${darkTheme ? "bg-surface-container border-gray-800" : "bg-white border-gray-200"}`}
             style={darkTheme ? {} : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}

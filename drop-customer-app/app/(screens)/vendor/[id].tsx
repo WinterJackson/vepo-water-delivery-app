@@ -92,11 +92,11 @@ const VendorDetails = (props: Props) => {
 			});
 			fetchCart();
 			Toast.success("Added to Cart", `${productName} added to your cart`);
-		} catch (e: any) {
-			if (e?.type === "vendor_conflict") {
+		} catch (e: unknown) {
+			if ((e as {type?: string})?.type === "vendor_conflict") {
 				Popup.show({
 					title: "Replace Cart?",
-					message: `Your cart has items from ${e.existing_vendor}. Adding this will replace your current cart.`,
+					message: `Your cart has items from ${(e as {existing_vendor?: string}).existing_vendor}. Adding this will replace your current cart.`,
 					cancelText: "Cancel",
 					confirmText: "Replace",
 					isDestructive: true,

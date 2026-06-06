@@ -69,8 +69,8 @@ export default function OrderDetail() {
             onSuccess: () => {
                 Toast.success("Success", "Order cancelled successfully");
             },
-            onError: (error: any) => {
-                Toast.error("Error", error.message || "Failed to cancel order");
+            onError: (error: Error) => {
+                Toast.error("Error", (error as Error).message || "Failed to cancel order");
             }
         });
     };

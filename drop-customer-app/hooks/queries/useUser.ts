@@ -61,7 +61,7 @@ export function useUpdateProfilePic() {
         onMutate: async (newProfilePic) => {
             await queryClient.cancelQueries({ queryKey: ['user', 'details'] });
             const previousUser = queryClient.getQueryData(['user', 'details']);
-            queryClient.setQueryData(['user', 'details'], (old: any) => {
+            queryClient.setQueryData(['user', 'details'], (old: import("@/types/models").BasicUser | undefined) => {
                 if (!old) return old;
                 return { ...old, profile_pic: newProfilePic };
             });
@@ -114,7 +114,7 @@ export function useUpdateUser() {
         onMutate: async (newUserData) => {
             await queryClient.cancelQueries({ queryKey: ['user', 'details'] });
             const previousUser = queryClient.getQueryData(['user', 'details']);
-            queryClient.setQueryData(['user', 'details'], (old: any) => {
+            queryClient.setQueryData(['user', 'details'], (old: import("@/types/models").BasicUser | undefined) => {
                 if (!old) return old;
                 return { ...old, ...newUserData };
             });

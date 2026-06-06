@@ -59,7 +59,7 @@ export default function TripRadarList({ orders, isLoading }: TripRadarListProps)
         router.push("/(screens)/ActiveDelivery" as any);
       },
       onError: (err) => {
-        showToast('error', 'Failed to accept', err.message);
+        showToast('error', 'Failed to accept', (err as Error).message);
       }
     });
   };

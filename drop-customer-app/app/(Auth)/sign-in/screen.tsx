@@ -92,7 +92,7 @@ export default function SignIn() {
 			}
 			let location = await Location.getCurrentPositionAsync({});
 			setLocation(location);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setShowLocationPrompt(true)
 		} 
 	}
@@ -107,8 +107,8 @@ export default function SignIn() {
 				lat: LocationFinal.coords.latitude,
 				lng: LocationFinal.coords.longitude,
 			});
-		} catch (error: any) {
-			if (__DEV__) console.error("Failed to update location:", error?.message);
+		} catch (error: unknown) {
+			if (__DEV__) console.error("Failed to update location:", (error as Error)?.message);
 		}
 	};
 
@@ -176,7 +176,7 @@ export default function SignIn() {
 				success = false;
 			}
 		} catch (err: any) {
-			if (err?.errors?.[0]?.message?.includes("already signed in") || err?.message?.includes("already signed in")) {
+			if (err?.errors?.[0]?.message?.includes("already signed in") || (err as Error)?.message?.includes("already signed in")) {
 				if (__DEV__) console.log("OAuth: User already signed in. Redirecting...");
 				router.replace("/");
 				return;

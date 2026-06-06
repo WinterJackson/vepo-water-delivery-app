@@ -99,14 +99,14 @@ export const useLocation = create<LocationState>((set, get) => ({
             // 5. Auto reverse-geocode after getting coordinates
             const { reverseGeocode } = get();
             await reverseGeocode(location.coords.latitude, location.coords.longitude);
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (__DEV__) console.warn("Location error:", error);
             set({
                 loading: false,
                 // CRITICAL: Do NOT show the permission prompt for general errors (like GPS timeouts).
                 // The prompt should strictly be for App-level permission denial.
                 showPrompt: false, 
-                error: error?.message || "Failed to get location"
+                error: (error as Error)?.message || "Failed to get location"
             });
         }
     }

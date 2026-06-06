@@ -58,7 +58,7 @@ export default function PrivacySecurity() {
         }
     };
 
-    const ActionItem = ({ title, icon, description, onPress }: any) => (
+    const ActionItem = ({ title, icon, description, onPress }: import("@/types/components").ActionItemProps) => (
         <TouchableOpacity 
             activeOpacity={0.7} 
             onPress={onPress}
@@ -79,7 +79,7 @@ export default function PrivacySecurity() {
         </TouchableOpacity>
     );
 
-    const ToggleItem = ({ title, icon, description, value, onToggle }: any) => (
+    const ToggleItem = ({ title, icon, description, value, onToggle }: import("@/types/components").ToggleItemProps) => (
         <View className={`p-4 mb-4 rounded-xl border flex-row items-center justify-between ${darkTheme ? "border-gray-800 bg-gray-900" : "border-gray-200 bg-white"}`}>
             <View className="flex-row items-center gap-4 flex-1 border-r border-transparent">
                 <View className={`w-10 h-10 items-center justify-center rounded-full ${darkTheme ? "bg-black" : "bg-white"}`}>

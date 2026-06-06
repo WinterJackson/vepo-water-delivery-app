@@ -44,7 +44,7 @@ const CartItem = ({ data, func }: Props) => {
 			});
 			setChangeQuantity(false);
 			if (func) func();
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setChangeQuantity(false);
 		}
 	};
@@ -56,7 +56,7 @@ const CartItem = ({ data, func }: Props) => {
 				id: data?.id,
 			});
 			if (func) func();
-		} catch (error: any) {
+		} catch (error: unknown) {
 			// handled by mutation
 		}
 	};

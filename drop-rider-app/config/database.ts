@@ -61,8 +61,8 @@ export const initDB = async () => {
                 created_at TEXT
             );
         `);
-    } catch (e: any) {
-        if (__DEV__ && !e?.message?.includes('NullPointerException')) {
+    } catch (e: unknown) {
+        if (__DEV__ && !(e as Error)?.message?.includes('NullPointerException')) {
             console.warn('[initDB] SQLite init failed (non-fatal):', e);
         }
         _db = null; // Prevent subsequent calls from throwing if initialization fails
@@ -139,8 +139,8 @@ export const getQueuedActions = async () => {
     if (!db) return [];
     try {
         return await db.getAllAsync('SELECT * FROM offline_actions ORDER BY created_at ASC');
-    } catch (e: any) {
-        if (__DEV__ && !e?.message?.includes('NullPointerException')) {
+    } catch (e: unknown) {
+        if (__DEV__ && !(e as Error)?.message?.includes('NullPointerException')) {
             console.warn('[getQueuedActions] SQLite failed:', e);
         }
         return [];

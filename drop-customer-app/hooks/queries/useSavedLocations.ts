@@ -117,7 +117,7 @@ export function useRevokeLocation() {
             const previousUser = queryClient.getQueryData(['user', 'details']);
 
             // Optimistically clear the user's location
-            queryClient.setQueryData(['user', 'details'], (old: any) => {
+            queryClient.setQueryData(['user', 'details'], (old: import("@/types/models").BasicUser | undefined) => {
                 if (!old) return old;
                 return {
                     ...old,
@@ -170,7 +170,7 @@ export function useSelectSavedLocation() {
 
             // Optimistically update the user details cache with the new location
             if (targetLoc) {
-                queryClient.setQueryData(['user', 'details'], (old: any) => {
+                queryClient.setQueryData(['user', 'details'], (old: import("@/types/models").BasicUser | undefined) => {
                     if (!old) return old;
                     return {
                         ...old,

@@ -181,8 +181,8 @@ export default function PlacesAutocomplete({
 					setPredictions([]);
 					setShowList(false);
 				}
-			} catch (e: any) {
-				if (e.name !== "AbortError") {
+			} catch (e: unknown) {
+				if ((e as Error).name !== "AbortError") {
 					console.warn("PlacesAutocomplete: prediction fetch failed", e);
 				}
 			} finally {

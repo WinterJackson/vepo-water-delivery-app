@@ -68,8 +68,8 @@ export default function BankDetails() {
             } else {
                 Toast.error("Error", "Could not save payout method.");
             }
-        } catch (error: any) {
-            Toast.error("Error", error.message || "Failed to add.");
+        } catch (error: unknown) {
+            Toast.error("Error", (error as Error).message || "Failed to add.");
         } finally {
             setIsSaving(false);
         }
@@ -108,8 +108,8 @@ export default function BankDetails() {
                     } else {
                         Toast.error("Error", "Could not remove payout method.");
                     }
-                } catch (error: any) {
-                    Toast.error("Error", error.message || "Failed to remove.");
+                } catch (error: unknown) {
+                    Toast.error("Error", (error as Error).message || "Failed to remove.");
                 }
             }
         });

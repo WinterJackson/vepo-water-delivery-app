@@ -91,7 +91,7 @@ export default function SignIn() {
 			}
 			let location = await Location.getCurrentPositionAsync({});
 			setLocation(location);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setShowLocationPrompt(true)
 		} 
 	}
@@ -160,8 +160,8 @@ export default function SignIn() {
 				if (__DEV__) console.warn("OAuth: No session created. signIn status:", signIn?.status, "signUp status:", signUp?.status);
 				success = false;
 			}
-		} catch (err: any) {
-			if (err?.errors?.[0]?.message?.includes("already signed in") || err?.message?.includes("already signed in")) {
+		} catch (err: unknown) {
+			if (err?.errors?.[0]?.message?.includes("already signed in") || (err as Error)?.message?.includes("already signed in")) {
 				if (__DEV__) console.log("OAuth: User already signed in. Redirecting...");
 				router.replace("/");
 				return;

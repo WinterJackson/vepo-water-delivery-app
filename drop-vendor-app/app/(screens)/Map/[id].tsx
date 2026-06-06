@@ -25,7 +25,7 @@ let MapView: any = null;
 let Marker: any = null;
 let MarkerAnimated: any = null;
 let UrlTile: any = null;
-let PROVIDER_GOOGLE: any = null;
+let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== "web") {
     try {

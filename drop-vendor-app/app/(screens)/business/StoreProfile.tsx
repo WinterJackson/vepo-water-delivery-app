@@ -205,7 +205,7 @@ export default function StoreProfile() {
                 Toast.error("Update Failed", err.detail || "Unable to update profile.");
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             Toast.error("Network Error", "Check your connection and try again.");
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         } finally {

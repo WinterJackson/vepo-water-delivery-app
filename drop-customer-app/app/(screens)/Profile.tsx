@@ -93,8 +93,8 @@ const Profile = () => {
 			fetchUserDetails().then(() => {
 				setChangeProfileLoading(false)
 			})
-		} catch (error: any) {
-			if (__DEV__) console.error("Profile pic update failed:", error?.message);
+		} catch (error: unknown) {
+			if (__DEV__) console.error("Profile pic update failed:", (error as Error)?.message);
 			setChangeProfileLoading(false)
 		}
 	}

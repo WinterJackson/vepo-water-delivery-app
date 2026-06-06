@@ -90,8 +90,8 @@ export default function Cashout() {
       Toast.success("Withdrawal submitted", "Your payout request is being processed.");
       setWithdrawAmount("");
       fetchLedgers();
-    } catch (error: any) {
-      Toast.error("Withdrawal failed", error.message);
+    } catch (error: unknown) {
+      Toast.error("Withdrawal failed", (error as Error).message);
     } finally {
       setProcessing(false);
     }

@@ -65,7 +65,7 @@ export default function SignUp() {
             });
 
             setStep(2);
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (isClerkAPIResponseError(err)) {
                 setErrors(err.errors.map((e) => e.longMessage).join(", "));
             } else {
@@ -94,7 +94,7 @@ export default function SignUp() {
             } else {
                 setErrors("Verification incomplete.");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (isClerkAPIResponseError(err)) {
                 setErrors(err.errors.map((e) => e.longMessage).join(", "));
             } else {

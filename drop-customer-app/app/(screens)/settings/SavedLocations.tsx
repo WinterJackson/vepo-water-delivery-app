@@ -26,7 +26,7 @@ export default function SavedLocations() {
     const revokeLocation = useRevokeLocation();
 
     // Helper: check if a saved location matches the current active user location
-    const isLocationActive = (loc: any): boolean => {
+    const isLocationActive = (loc: import("@/types/models").SavedLocation): boolean => {
         if (!User?.location_address || !loc?.address) return false;
         // Primary match: exact address string comparison
         if (loc.address === User.location_address) return true;
@@ -39,17 +39,17 @@ export default function SavedLocations() {
         return false;
     };
 
-    const handleSelect = async (loc: any) => {
+    const handleSelect = async (loc: import("@/types/models").SavedLocation) => {
         try {
             await selectSavedLocation.mutateAsync(loc.id);
             queryClient.invalidateQueries({ queryKey: ['user', 'details'] });
             Toast.success("Location Updated", `Delivering to ${loc.address}`);
-        } catch (e: any) {
-            Toast.error("Error", e.message || "Could not select location");
+        } catch (e: unknown) {
+            Toast.error("Error", (e as Error).message || "Could not select location");
         }
     };
 
-    const handleDelete = (loc: any) => {
+    const handleDelete = (loc: import("@/types/models").SavedLocation) => {
         Popup.show({
             title: "Delete Location",
             message: `Remove "${loc.label || loc.address}"?`,
@@ -139,7 +139,7 @@ export default function SavedLocations() {
                         <Text className={`text-xs font-semibold uppercase tracking-wider mb-1 ${darkTheme ? "text-gray-500" : "text-gray-400"}`}>
                             Your Addresses ({savedLocations.length})
                         </Text>
-                        {savedLocations.map((loc: any) => (
+                        {savedLocations.map((loc: import("@/types/models").SavedLocation) => (
                             <PressableScale
                                 key={loc.id}
                                 onPress={() => handleSelect(loc)}

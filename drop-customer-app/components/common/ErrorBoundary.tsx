@@ -12,7 +12,7 @@ const ErrorFallbackUI = ({ error, resetCount, maxResets, onReset }: any) => {
     <View style={[styles.container, { backgroundColor: isDark ? ERROR_BOUNDARY.bgDark : ERROR_BOUNDARY.bgLight }]}>
       <Text style={[styles.title, { color: isDark ? BRAND.white : BRAND.textDark }]}>Something went wrong</Text>
       <Text style={[styles.message, { color: isDark ? ERROR_BOUNDARY.subTextDark : ERROR_BOUNDARY.subTextLight }]} numberOfLines={3}>
-        {error?.message ?? 'An unexpected error occurred.'}
+        {(error as Error)?.message ?? 'An unexpected error occurred.'}
       </Text>
       {resetCount < maxResets ? (
         <PressableScale style={styles.button} onPress={onReset}>
@@ -57,7 +57,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     if (__DEV__) {
-      console.error('[ErrorBoundary] Caught error:', error.message, info.componentStack);
+      console.error('[ErrorBoundary] Caught error:', (error as Error).message, info.componentStack);
     }
     // TODO: In production, report to Sentry/Crashlytics:
     // Sentry.captureException(error, { extra: { componentStack: info.componentStack } });

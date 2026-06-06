@@ -78,7 +78,7 @@ export const useImageUpload = () => {
       } else {
         throw new Error('Upload failed');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (__DEV__) console.error('Cloudinary upload error:', err);
       setError('Failed to upload image');
       Toast.error('Upload Error', 'Could not upload image to Cloudinary');

@@ -44,7 +44,7 @@ export default function RepeatOrderScreen() {
       fetchCart();
       Toast.success('Order Added', 'All items added to your cart!');
       router.push('/(screens)/Cart');
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (__DEV__) console.error('Repeat order failed:', e);
       Toast.error('Error', 'Failed to add items to cart. Please try again.');
     }

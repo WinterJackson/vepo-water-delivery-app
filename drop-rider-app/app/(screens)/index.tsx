@@ -192,11 +192,11 @@ export default function Dashboard() {
       if (value) {
         refetchRadar();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (__DEV__) console.error(e);
-      if (e.message === "PERMISSION_DENIED") {
+      if ((e as Error).message === "PERMISSION_DENIED") {
         Toast.error("Permission Denied", "Please grant location permissions to go online.");
-      } else if (e.message === "SERVICES_DISABLED") {
+      } else if ((e as Error).message === "SERVICES_DISABLED") {
         // Do nothing, Alert is already shown
       } else {
         Toast.error("Status Update Failed", "We couldn't toggle your availability.");

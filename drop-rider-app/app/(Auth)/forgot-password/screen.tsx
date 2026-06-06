@@ -43,7 +43,7 @@ export default function ForgotPassword() {
                 identifier: emailAddress,
             });
             setSuccessfulCreation(true);
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (isClerkAPIResponseError(err)) {
                 setErrors(err.errors.map((e) => e.longMessage).join(", "));
             } else {
@@ -70,7 +70,7 @@ export default function ForgotPassword() {
             } else {
                 setErrors("Reset failed. Please check your inputs.");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             if (isClerkAPIResponseError(err)) {
                 setErrors(err.errors.map((e) => e.longMessage).join(", "));
             } else {

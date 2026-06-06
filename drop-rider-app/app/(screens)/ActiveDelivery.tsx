@@ -50,7 +50,7 @@ let MapView: any = null;
 let Marker: any = null;
 let Polyline: any = null;
 let UrlTile: any = null;
-let PROVIDER_GOOGLE: any = null;
+let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== 'web') {
     const maps = require('react-native-maps');
@@ -400,8 +400,8 @@ export default function ActiveDelivery() {
       Toast.success("Dispute Raised", "The customer has been notified to correct their floor level. You will be compensated for the waiting time.");
       // Invalidate to fetch the updated state
       queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
-    } catch (e: any) {
-      Toast.error("Error", e.message || "Failed to report mismatch");
+    } catch (e: unknown) {
+      Toast.error("Error", (e as Error).message || "Failed to report mismatch");
     } finally {
       setIsReportingMismatch(false);
     }
@@ -674,8 +674,8 @@ export default function ActiveDelivery() {
                               await rejectDelivery(activeOrder.id);
                               setActiveOrder(null);
                               Toast.success("Rejected", "Delivery has been reassigned.");
-                            } catch (e: any) {
-                              Toast.error("Error", e.message || "Failed to reject delivery");
+                            } catch (e: unknown) {
+                              Toast.error("Error", (e as Error).message || "Failed to reject delivery");
                             }
                           }
                       });

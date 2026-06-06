@@ -38,7 +38,7 @@ const CloudinaryUpload = async (uri: string, name: string | null | undefined) =>
 
     const data = await res.json();
     return data;
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error('Cloudinary upload error:', err);
     throw err;
   }

@@ -84,8 +84,8 @@ export default function SignUp() {
 		}
 		try {
 			await createUser(payload);
-		} catch (error: any) {
-			if (__DEV__) console.error("Error creating database user:", error?.message)
+		} catch (error: unknown) {
+			if (__DEV__) console.error("Error creating database user:", (error as Error)?.message)
 		}
 	}
 
@@ -154,7 +154,7 @@ export default function SignUp() {
 		} catch (err) {
 			// See https://clerk.com/docs/custom-flows/error-handling
 			// for more info on error handling
-			// if (__DEV__) console.error(JSON.stringify(err, null, 2));
+			// if (__DEV__) console.error(JSON.stringify((err as Error).message || (err as Error), null, 2));
 			success = false
 		}finally{
 			if (success){
@@ -430,7 +430,7 @@ export default function SignUp() {
 										try {
 											await signUp?.prepareEmailAddressVerification({ strategy: "email_code" });
 											Toast.success("Code Resent", "A new verification code has been sent to your email.");
-										} catch (e: any) {
+										} catch (e: unknown) {
 											Toast.error("Error", e?.errors?.[0]?.longMessage || "Failed to resend code.");
 										}
 									}}

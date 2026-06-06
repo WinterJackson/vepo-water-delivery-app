@@ -79,7 +79,7 @@ export function useRiderOrders() {
         },
         staleTime: 1000 * 60,
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });
@@ -124,7 +124,7 @@ export function useTripRadar() {
         },
         staleTime: 1000 * 5,
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });
@@ -148,7 +148,7 @@ export function useRiderEarnings() {
         },
         staleTime: 1000 * 30,
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });
@@ -172,7 +172,7 @@ export function useRiderProfile() {
         },
         staleTime: 1000 * 60 * 2,
         retry: (failureCount, error) => {
-            if (error.message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND") return false;
             return failureCount < 3;
         }
     });

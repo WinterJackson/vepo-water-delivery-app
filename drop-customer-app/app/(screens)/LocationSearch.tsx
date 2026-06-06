@@ -33,7 +33,7 @@ export default function LocationSearch() {
 	const [isLocating, setIsLocating] = useState(false);
 	const [loadingLocationId, setLoadingLocationId] = useState<string | null>(null);
 
-	const isLocationActive = (loc: any): boolean => {
+	const isLocationActive = (loc: import("@/types/models").SavedLocation): boolean => {
 		if (!User?.location_address || !loc?.address) return false;
 		if (loc.address === User.location_address) return true;
 		if (User?.lat != null && User?.lng != null && loc.lat != null && loc.lng != null) {
@@ -74,21 +74,21 @@ export default function LocationSearch() {
 		}
 	};
 
-	const handleUseSavedLocation = async (loc: any) => {
+	const handleUseSavedLocation = async (loc: import("@/types/models").SavedLocation) => {
 		if (isLocationActive(loc)) return; 
 		setLoadingLocationId(loc.id);
 		try {
 			await selectSavedLocation.mutateAsync(loc.id);
 			Toast.success("Location Updated", `Delivering to ${loc.address}`);
 			router.back();
-		} catch (e: any) {
-			Toast.error("Error", e.message || "Could not select location");
+		} catch (e: unknown) {
+			Toast.error("Error", (e as Error).message || "Could not select location");
 		} finally {
 			setLoadingLocationId(null);
 		}
 	};
 
-	const handleRevokeLocation = async (loc: any) => {
+	const handleRevokeLocation = async (loc: import("@/types/models").SavedLocation) => {
 		setLoadingLocationId(loc.id);
 		try {
 			await revokeLocation.mutateAsync();
@@ -100,7 +100,7 @@ export default function LocationSearch() {
 		}
 	};
 
-	const handleDeleteLocation = async (loc: any) => {
+	const handleDeleteLocation = async (loc: import("@/types/models").SavedLocation) => {
 		setLoadingLocationId(loc.id);
 		try {
 			await deleteLocation.mutateAsync(loc.id);
@@ -115,7 +115,7 @@ export default function LocationSearch() {
 		}
 	};
 
-	const SavedLocationCard = ({ loc, single = false }: { loc: any, single?: boolean }) => {
+	const SavedLocationCard = ({ loc, single = false }: { loc: import("@/types/models").SavedLocation, single?: boolean }) => {
 		const isActive = isLocationActive(loc);
 		const isLoading = loadingLocationId === loc.id;
 		
@@ -283,7 +283,7 @@ export default function LocationSearch() {
 							Saved Places
 						</Text>
 						<View className="gap-2">
-							{savedLocations.map((loc: any) => (
+							{savedLocations.map((loc: import("@/types/models").SavedLocation) => (
 								<SavedLocationCard key={loc.id} loc={loc} />
 							))}
 						</View>

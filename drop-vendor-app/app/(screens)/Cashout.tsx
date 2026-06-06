@@ -128,9 +128,9 @@ export default function Cashout() {
       Toast.success("Request Submitted", "Your payout request is being processed.");
       setWithdrawAmount("");
       fetchLedgers();
-    } catch (error: any) {
+    } catch (error: unknown) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Toast.error("Withdrawal Failed", error.message);
+      Toast.error("Withdrawal Failed", (error as Error).message);
     } finally {
       setProcessing(false);
     }

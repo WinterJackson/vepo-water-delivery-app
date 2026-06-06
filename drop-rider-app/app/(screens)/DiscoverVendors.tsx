@@ -24,7 +24,7 @@ const FlashList = OriginalFlashList as any;
 let MapView: any = null;
 let Marker: any = null;
 let UrlTile: any = null;
-let PROVIDER_GOOGLE: any = null;
+let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== 'web') {
     const maps = require('react-native-maps');
@@ -84,11 +84,11 @@ export default function DiscoverVendors() {
   
   const { mutedVendors, toggleVendorMute } = useRiderStore();
 
-  const filteredVendors = vendors.filter((v: any) =>
+  const filteredVendors = vendors.filter((v: import("@/types/models").Vendor) =>
       v.business_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const activeVendorCount = vendors.filter((v: any) => v.status === "pending" || v.status === "approved").length;
+  const activeVendorCount = vendors.filter((v: import("@/types/models").Vendor) => v.status === "pending" || v.status === "approved").length;
 
   const fetchVendors = async (lat: number, lng: number) => {
     const token = await getToken();
@@ -341,7 +341,7 @@ export default function DiscoverVendors() {
                 {/* 🟢 OSM TILE OVERLAY (Remove this block when using Google Maps) */}
                 {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
                 {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-                {filteredVendors.map((vendor: any) => (
+                {filteredVendors.map((vendor: import("@/types/models").Vendor) => (
                   <Marker
                     key={vendor.id}
                     coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}

@@ -49,7 +49,7 @@ export default function Index() {
 			if (status !== "granted") return;
 			let location = await Location.getCurrentPositionAsync({});
 			setLocation(location);
-		} catch (error: any) {
+		} catch (error: unknown) {
 			setShowLocationPrompt(true);
 		}
 	}

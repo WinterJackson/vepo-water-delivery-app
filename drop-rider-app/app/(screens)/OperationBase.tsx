@@ -23,7 +23,7 @@ let Marker: any = null;
 let Circle: any = null;
 let Polygon: any = null;
 let UrlTile: any = null;
-let PROVIDER_GOOGLE: any = null;
+let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== 'web') {
   const maps = require('react-native-maps');
@@ -159,7 +159,7 @@ export default function OperationBase() {
           longitudeDelta: 0.045,
         });
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       // Graceful fallback when location services are disabled (emulator, airplane mode, etc.)
       if (!location) {
         setLocation({ latitude: -1.2921, longitude: 36.8219 });
@@ -313,7 +313,7 @@ export default function OperationBase() {
               latitudeDelta: 0.045, // Tuned to always show the full 2KM radius circle
               longitudeDelta: 0.045,
             }}
-            onRegionChangeComplete={(region: any) => {
+            onRegionChangeComplete={(region: import("@/types/models").MapRegion) => {
               setLocation({ latitude: region.latitude, longitude: region.longitude });
               reverseGeocode(region.latitude, region.longitude);
             }}
