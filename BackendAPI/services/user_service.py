@@ -29,6 +29,10 @@ async def update_user_location(session : AsyncSession, data: RequestBodyCoordina
   user.location = from_shape(Point(data.lng, data.lat), srid=4326)
   if data.location_address is not None:
       user.location_address = data.location_address
+  if data.floor_level is not None:
+      user.floor_level = data.floor_level
+  if data.has_elevator is not None:
+      user.has_elevator = data.has_elevator
   await session.commit()
 
 

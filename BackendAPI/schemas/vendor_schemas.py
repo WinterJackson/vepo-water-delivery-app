@@ -69,6 +69,8 @@ class RequestBodyCoordinates(BaseModel):
   lat: float
   lng: float
   location_address: str | None = None
+  floor_level: int | None = None
+  has_elevator: bool | None = None
 
   model_config = {"from_attributes": True}
 
