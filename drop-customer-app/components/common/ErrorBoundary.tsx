@@ -56,8 +56,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[FATAL_CRASH] Caught error:', (error as Error).message, info.componentStack);
     if (__DEV__) {
-      console.error('[ErrorBoundary] Caught error:', (error as Error).message, info.componentStack);
+      // Dev only actions if necessary
     }
     // TODO: In production, report to Sentry/Crashlytics:
     // Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
