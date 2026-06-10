@@ -9,7 +9,6 @@ import { Toast } from "@/lib/toast";
 import { useRiderProfile, useRiderEarnings, useRiderOrders, useTripRadar } from "@/hooks/queries/useRiderData";
 import { useRiderStore } from "@/stores/useRiderStore";
 import {
-    ActivityIndicator,
     RefreshControl,
     ScrollView, 
     StatusBar,

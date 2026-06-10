@@ -8,6 +8,7 @@ import { BRAND, TOAST } from "@/constants/brandColors";
 import { RiderOrder, useAcceptOrder } from '@/hooks/queries/useRiderData';
 import { useToastStore } from '@/stores/toastStore';
 import { HorizontalListSkeleton } from '../skeletons/ContextualSkeletons';
+
 interface TripRadarListProps {
   orders: RiderOrder[];
   isLoading: boolean;
