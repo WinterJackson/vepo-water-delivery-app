@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { BRAND, TOAST } from "@/constants/brandColors";
 import { RiderOrder, useAcceptOrder } from '@/hooks/queries/useRiderData';
 import { useToastStore } from '@/stores/toastStore';
-
+import { HorizontalListSkeleton } from '../skeletons/ContextualSkeletons';
 interface TripRadarListProps {
   orders: RiderOrder[];
   isLoading: boolean;
@@ -23,9 +23,16 @@ export default function TripRadarList({ orders, isLoading }: TripRadarListProps)
 
   if (isLoading && orders.length === 0) {
     return (
-      <View className="px-5 my-4 items-center justify-center py-6">
-        <ActivityIndicator color={BRAND.primary} />
-        <Text className={`mt-2 text-sm ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Scanning for orders...</Text>
+      <View className="mt-4 mb-2">
+        <View className="px-5 flex-row items-center justify-between mb-3">
+          <View className="flex-row items-center gap-2">
+            <Ionicons name="pulse-outline" size={24} color={BRAND.primary} />
+            <Text className={`font-bold text-lg ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>Trip Radar</Text>
+          </View>
+        </View>
+        <View className="pl-5">
+            <HorizontalListSkeleton />
+        </View>
       </View>
     );
   }

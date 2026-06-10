@@ -31,6 +31,7 @@ import BentoStats from "@/components/dashboard/BentoStats";
 import ActiveTripCard from "@/components/dashboard/ActiveTripCard";
 import TripRadarList from "@/components/dashboard/TripRadarList";
 import { Popup } from "@/lib/popup";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 export default function Dashboard() {
   const { currentTheme } = useContext(UIThemeContext);
@@ -317,8 +318,8 @@ export default function Dashboard() {
           >
             {/* Status Toggle - Only for Operational Riders */}
             {isProfileLoading ? (
-              <View className={`mx-5 mb-4 mt-2 p-5 rounded-2xl border items-center justify-center ${darkTheme ? "bg-[#1A1A1A] border-gray-800" : "bg-white border-gray-200"}`} style={{ height: 100 }}>
-                <ActivityIndicator color={BRAND.primary} />
+              <View className={`mx-5 mb-4 mt-2 border rounded-2xl ${darkTheme ? "border-gray-800" : "border-gray-200"}`} style={{ height: 100, overflow: 'hidden' }}>
+                <Skeleton width="100%" height={100} borderRadius={16} />
               </View>
             ) : profile?.employer_vendor_id ? (
               <SwipeToGoOnline isOnline={isOnline} onToggle={toggleOnline} isLoading={isToggling} />

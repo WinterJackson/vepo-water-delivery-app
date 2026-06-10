@@ -63,6 +63,7 @@ import { useAllVendors } from "@/hooks/queries/useVendors";
 import { useSavedLocations, useCreateSavedLocation, useSelectSavedLocation } from "@/hooks/queries/useSavedLocations";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQueryClient } from '@tanstack/react-query';
+import { Skeleton } from "@/components/ui/Skeleton";
 import * as Location from "expo-location";
 import { usePathname, useRouter, useLocalSearchParams } from "expo-router";
 import { Image } from "react-native";
@@ -937,9 +938,8 @@ const initialRegion: import("@/types/models").MapRegion = {
 	// Fix for the permanent "blank page" during hot reload
 	if (!isLoaded || loadingUser) {
 		return (
-			<View className={`flex-1 items-center justify-center ${darkTheme ? "bg-black" : "bg-white"}`}>
-				<ActivityIndicator size="large" color={BRAND.primary} />
-				<Text className={`mt-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Loading map...</Text>
+			<View className={`flex-1 ${darkTheme ? "bg-black" : "bg-white"}`}>
+				<Skeleton width="100%" height="100%" borderRadius={0} />
 			</View>
 		);
 	}

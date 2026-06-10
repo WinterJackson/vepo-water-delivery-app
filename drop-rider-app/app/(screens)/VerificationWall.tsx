@@ -48,7 +48,7 @@ export default function VerificationWall() {
         }
       }
     } catch (e) {
-      console.log("Error checking KYC status", e);
+      if (__DEV__) console.log("Error checking KYC status", e);
     } finally {
       setLoading(false);
     }

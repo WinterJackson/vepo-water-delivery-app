@@ -8,7 +8,7 @@ import DropButton from "@/components/ui/DropButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useVendorFavorites } from "@/hooks/queries/useVendorFavorites";
 import { BRAND } from "@/constants/brandColors";
-
+import { Skeleton } from "@/components/ui/Skeleton";
 export default function FavouritesList() {
   const router = useRouter();
   const { currentTheme } = useContext(UIThemeContext);
@@ -43,8 +43,10 @@ export default function FavouritesList() {
       </View>
 
       {isLoading ? (
-        <View className="h-24 items-center justify-center">
-          <ActivityIndicator size="small" color={BRAND.primary} />
+        <View className="flex-row px-5 py-2 gap-3">
+          <Skeleton width={140} height={56} borderRadius={28} />
+          <Skeleton width={140} height={56} borderRadius={28} />
+          <Skeleton width={140} height={56} borderRadius={28} />
         </View>
       ) : (
         <ScrollView 

@@ -13,6 +13,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import PressableScale from "@/components/ui/PressableScale";
 import { Ionicons } from "@expo/vector-icons";
 import { BRAND } from "@/constants/brandColors";
+import { Skeleton } from "@/components/ui/Skeleton";
 import * as Haptics from "expo-haptics";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -215,8 +216,8 @@ export default function LiveMap() {
                         )}
                     </MapView>
                 ) : (
-                    <View className="flex-1 items-center justify-center bg-slate-100">
-                        <ActivityIndicator size="large" color={BRAND.primary} />
+                    <View className="flex-1">
+                        <Skeleton width="100%" height="100%" borderRadius={0} />
                     </View>
                 )}
 
