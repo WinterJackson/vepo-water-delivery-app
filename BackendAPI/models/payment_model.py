@@ -12,6 +12,7 @@ class Payment(Base):
     order_id = Column(UUID(as_uuid=True), ForeignKey("Orders.id"), nullable=True, index=True)
     checkout_request_id = Column(String, nullable=False, unique=True, index=True)
     mpesa_receipt = Column(String, nullable=True, index=True)  # MpesaReceiptNumber from callback
+    reversal_conversation_id = Column(String, nullable=True, index=True)  # M-Pesa Reversal ConversationID
     phone = Column(String, nullable=False)
     amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(50), nullable=False, default="pending")  # pending, paid, failed, refunded

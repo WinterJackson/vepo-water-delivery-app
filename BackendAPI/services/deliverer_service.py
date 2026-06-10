@@ -22,21 +22,11 @@ logger = logging.getLogger(__name__)
 
 
 async def get_deliverer_by_clerk_id(session: AsyncSession, clerk_id: str):
+    """Look up a deliverer by their Clerk ID. Returns None if not found."""
     result = await session.execute(
         select(Deliverer).where(Deliverer.clerk_id == clerk_id)
     )
-    deliverer = result.scalar_one_or_none()
-    
-    if not deliverer:
-        # Auto-link hack for development: If their Clerk ID changed, re-assign it to the first deliverer
-        result_all = await session.execute(select(Deliverer))
-        first_d = result_all.scalars().first()
-        if first_d:
-            first_d.clerk_id = clerk_id
-            await session.commit()
-            return first_d
-
-    return deliverer
+    return result.scalar_one_or_none()
 
 
 async def register_deliverer(session: AsyncSession, clerk_id: str, data: dict):
@@ -508,6 +498,27 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
         await session.rollback()
         raise HTTPException(status_code=409, detail="This order has already been claimed by another rider.")
 
+    # SEC-03 FIX: Vendor Fleet Integrity Check
+    # Verify rider is approved for this vendor, or auto-register for Tier 2 Trip Radar claims
+    from models.vendor_rider_model import VendorRiderRegistry
+    registry_q = select(VendorRiderRegistry).where(
+        and_(
+            VendorRiderRegistry.rider_id == deliverer.id,
+            VendorRiderRegistry.vendor_id == order.vendor_id,
+            VendorRiderRegistry.status == "approved"
+        )
+    )
+    registry_result = await session.execute(registry_q)
+    if not registry_result.scalar_one_or_none():
+        # Auto-register gig rider for this vendor (Trip Radar Tier 2 implicit approval)
+        new_registration = VendorRiderRegistry(
+            rider_id=deliverer.id,
+            vendor_id=order.vendor_id,
+            status="approved"
+        )
+        session.add(new_registration)
+        logger.info(f"Trip Radar: Auto-registered rider {deliverer.id} for vendor {order.vendor_id}")
+
     # Success: Claim the order
     order.deliverer_id = deliverer.id
     order.order_status = "pending"
@@ -515,14 +526,18 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
 
     # --- Gamification Ledger Recalculation ---
     # The order was created assuming 10% commission. If this rider is Platinum, reduce to 7%.
+    # FIN-01 FIX: Use Decimal for currency precision
     if deliverer.is_platinum and order.rider_commission and order.rider_commission > 0:
+        from decimal import Decimal, ROUND_HALF_UP
         from services.order_service import GIG_PLATINUM_COMMISSION
-        new_commission = round(float(order.delivery_fee) * GIG_PLATINUM_COMMISSION, 2)
-        commission_diff = float(order.rider_commission) - new_commission
+        delivery_fee_d = Decimal(str(order.delivery_fee))
+        new_commission = (delivery_fee_d * Decimal(str(GIG_PLATINUM_COMMISSION))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        old_commission = Decimal(str(order.rider_commission))
+        commission_diff = old_commission - new_commission
         if commission_diff > 0:
-            order.rider_commission = new_commission
-            order.rider_net = float(order.rider_net) + commission_diff
-            order.platform_total = float(order.platform_total) - commission_diff
+            order.rider_commission = float(new_commission)
+            order.rider_net = float(Decimal(str(order.rider_net)) + commission_diff)
+            order.platform_total = float(Decimal(str(order.platform_total)) - commission_diff)
 
     await session.commit()
 
@@ -603,6 +618,46 @@ async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id
 
     return {"message": "Mismatch reported. Waiting for customer response.", "status": order.order_status}
 
+async def _bottle_rejection_fallback(order_id: UUID, rejection_id: UUID):
+    """EDGE-03 FIX: Timeout fallback for bottle rejections. Auto-cancels if admin doesn't review in 3 mins."""
+    from db.session import AsyncSessionLocal
+    await asyncio.sleep(180) # Wait 3 minutes
+    try:
+        async with AsyncSessionLocal() as session:
+            from models.bottle_rejection_model import BottleRejectionTicket, RejectionStatus
+            from models.order_model import Order
+            rejection = await session.get(BottleRejectionTicket, rejection_id)
+            if rejection and rejection.status == RejectionStatus.PENDING_REVIEW:
+                rejection.status = RejectionStatus.APPROVED
+                rejection.admin_notes = "Auto-approved due to timeout. Order cancelled."
+                
+                order = await session.get(Order, order_id)
+                if order and order.order_status == "pending_review":
+                    order.order_status = "cancelled"
+                    if order.payment_status == "paid":
+                        order.payment_status = "refund_pending"
+                        order.commission_lost = order.platform_total
+                    
+                    from services.vendor_management_service import _restore_order_stock
+                    await _restore_order_stock(session, order)
+                    await session.commit()
+                    
+                    from routes.websocket_routes import manager
+                    await manager.broadcast_order_update(
+                        vendor_id=str(order.vendor_id),
+                        customer_id=str(order.customer_id),
+                        deliverer_id=str(order.deliverer_id),
+                        payload={
+                            "action": "ORDER_STATUS_UPDATE", 
+                            "order_id": str(order.id), 
+                            "status": "cancelled",
+                            "message": "Order cancelled because your empty bottle did not pass inspection."
+                        }
+                    )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Fallback rejection error: {e}")
+
 async def report_bottle_rejection(session: AsyncSession, clerk_id: str, order_id: UUID, reason_text: str, photo_urls: list[str]):
     from models.bottle_rejection_model import BottleRejectionTicket, RejectionStatus
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
@@ -627,6 +682,10 @@ async def report_bottle_rejection(session: AsyncSession, clerk_id: str, order_id
     
     order.order_status = "pending_review"
     await session.commit()
+    await session.refresh(rejection)
+
+    # Spawn background task for timeout fallback
+    asyncio.create_task(_bottle_rejection_fallback(order.id, rejection.id))
 
     try:
         from routes.websocket_routes import manager

@@ -284,6 +284,19 @@ async def delete_account(
         db_user.location_address = None
 
         await session.commit()
+        
+        # SEC-05 FIX: Invalidate Clerk Sessions
+        import os
+        from clerk_backend_api import Clerk
+        clerk_secret = os.getenv("CLERK_SECRET_KEY")
+        if clerk_secret:
+            try:
+                clerk = Clerk(bearer_auth=clerk_secret)
+                # Clerk backend SDK handles deletion and session invalidation
+                clerk.users.delete(clerk_id)
+            except Exception as e:
+                logger.error(f"Failed to delete Clerk user {clerk_id}: {e}")
+
         return {"message": "Your account has been permanently deleted and all personal data anonymized."}
 
     elif body.app_type == "vendor":
@@ -314,6 +327,18 @@ async def delete_account(
         db_vendor.location_address = None
 
         await session.commit()
+        
+        # SEC-05 FIX: Invalidate Clerk Sessions
+        import os
+        from clerk_backend_api import Clerk
+        clerk_secret = os.getenv("CLERK_SECRET_KEY")
+        if clerk_secret:
+            try:
+                clerk = Clerk(bearer_auth=clerk_secret)
+                clerk.users.delete(clerk_id)
+            except Exception as e:
+                logger.error(f"Failed to delete Clerk user {clerk_id}: {e}")
+
         return {"message": "Your vendor account has been permanently deleted and all personal data anonymized."}
 
     elif body.app_type == "rider":
@@ -347,6 +372,18 @@ async def delete_account(
         db_rider.plate_number = "REDACTED"
 
         await session.commit()
+        
+        # SEC-05 FIX: Invalidate Clerk Sessions
+        import os
+        from clerk_backend_api import Clerk
+        clerk_secret = os.getenv("CLERK_SECRET_KEY")
+        if clerk_secret:
+            try:
+                clerk = Clerk(bearer_auth=clerk_secret)
+                clerk.users.delete(clerk_id)
+            except Exception as e:
+                logger.error(f"Failed to delete Clerk user {clerk_id}: {e}")
+
         return {"message": "Your rider account has been permanently deleted and all personal data anonymized."}
 
     raise HTTPException(status_code=400, detail="Invalid app_type. Must be 'customer', 'vendor', or 'rider'.")

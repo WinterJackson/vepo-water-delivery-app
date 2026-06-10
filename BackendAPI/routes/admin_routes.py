@@ -24,19 +24,29 @@ async def get_platform_revenue(
     db: AsyncSession = Depends(get_db),
     admin_id: str = Depends(require_admin)
 ):
-    query = "SELECT SUM(platform_total) as total, SUM(vendor_commission) as v_comm, SUM(service_fee) as s_fee, SUM(rider_commission) as r_comm, SUM(delivery_markup) as d_markup, SUM(surge_fee) as surge, COUNT(id) as orders, SUM(total_amount) as gmv FROM \"Orders\" WHERE payment_status = 'paid'"
-    
-    # We can use sqlalchemy text for raw queries to speed up complex aggregations
-    res = await db.execute(text(query))
+    base_query = "SELECT SUM(platform_total) as total, SUM(vendor_commission) as v_comm, SUM(service_fee) as s_fee, SUM(rider_commission) as r_comm, SUM(delivery_markup) as d_markup, SUM(surge_fee) as surge, COUNT(id) as orders, SUM(total_amount) as gmv FROM \"Orders\" WHERE payment_status = 'paid'"
+    retail_base = "SELECT COUNT(o.id) as orders, SUM(o.platform_total) as revenue FROM \"Orders\" o JOIN \"Vendors\" v ON o.vendor_id = v.id WHERE v.vendor_type = 'retail_refill' AND o.payment_status = 'paid'"
+    wholesale_base = "SELECT COUNT(o.id) as orders, SUM(o.platform_total) as revenue FROM \"Orders\" o JOIN \"Vendors\" v ON o.vendor_id = v.id WHERE v.vendor_type = 'wholesale_b2b' AND o.payment_status = 'paid'"
+
+    params = {}
+    if start_date:
+        base_query += " AND created_at >= :start_date"
+        retail_base += " AND o.created_at >= :start_date"
+        wholesale_base += " AND o.created_at >= :start_date"
+        params["start_date"] = f"{start_date} 00:00:00"
+    if end_date:
+        base_query += " AND created_at <= :end_date"
+        retail_base += " AND o.created_at <= :end_date"
+        wholesale_base += " AND o.created_at <= :end_date"
+        params["end_date"] = f"{end_date} 23:59:59"
+
+    res = await db.execute(text(base_query), params)
     row = res.fetchone()
     
-    # Wholesale vs Retail
-    retail_query = "SELECT COUNT(id) as orders, SUM(platform_total) as revenue FROM \"Orders\" o JOIN \"Vendors\" v ON o.vendor_id = v.id WHERE v.vendor_type = 'retail_refill' AND o.payment_status = 'paid'"
-    retail_res = await db.execute(text(retail_query))
+    retail_res = await db.execute(text(retail_base), params)
     retail_row = retail_res.fetchone()
     
-    wholesale_query = "SELECT COUNT(id) as orders, SUM(platform_total) as revenue FROM \"Orders\" o JOIN \"Vendors\" v ON o.vendor_id = v.id WHERE v.vendor_type = 'wholesale_b2b' AND o.payment_status = 'paid'"
-    wholesale_res = await db.execute(text(wholesale_query))
+    wholesale_res = await db.execute(text(wholesale_base), params)
     wholesale_row = wholesale_res.fetchone()
 
     return {

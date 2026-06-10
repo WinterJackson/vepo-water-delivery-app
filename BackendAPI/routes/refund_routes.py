@@ -22,13 +22,19 @@ router = APIRouter()
 @router.post("/process-refunds")
 async def trigger_refund_processing(
     session: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    admin_id: str = Depends(get_current_user),
 ):
     """
     Process all orders with payment_status = 'refund_pending'.
     Initiates M-Pesa Reversals for each and updates their status.
-    Protected by auth — should be called by admin or a scheduled cron job.
+    SEC-06 FIX: Protected by admin guard — only admin Clerk IDs may trigger batch refunds.
     """
+    import os
+    clerk_id = admin_id["sub"]
+    allowed_ids = os.getenv("ADMIN_CLERK_IDS", "").split(",")
+    if clerk_id not in [aid.strip() for aid in allowed_ids if aid.strip()]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Unauthorized. Admin access required.")
     result = await process_all_pending_refunds(session)
     return result
 
@@ -58,38 +64,26 @@ async def reversal_result_callback(request: Request, session: AsyncSession = Dep
             logger.error("Reversal result callback missing ConversationID")
             return JSONResponse(status_code=400, content={"message": "Missing ConversationID"})
 
-        # Find the matching order by looking up the payment whose receipt was reversed
-        # The ConversationID from the reversal is matched via the original transaction
+        # EDGE-04 FIX: Find the exact Payment record using reversal_conversation_id
         from sqlalchemy.future import select
-        from sqlalchemy import and_
         from models.order_model import Order
         from models.payment_model import Payment
 
-        # Find orders in refund_processing state
-        order_stmt = select(Order).where(Order.payment_status == "refund_processing")
+        pay_stmt = select(Payment).where(Payment.reversal_conversation_id == conversation_id)
+        pay_result = await session.execute(pay_stmt)
+        matched_payment = pay_result.scalars().first()
+
+        if not matched_payment:
+            logger.warning(f"Reversal result: No matching payment found for ConversationID {conversation_id}")
+            return {"message": "No matching payment found"}
+
+        order_stmt = select(Order).where(Order.id == matched_payment.order_id)
         order_result = await session.execute(order_stmt)
-        processing_orders = order_result.scalars().all()
-
-        matched_order = None
-        matched_payment = None
-
-        for order in processing_orders:
-            pay_stmt = select(Payment).where(
-                and_(
-                    Payment.order_id == order.id,
-                    Payment.status == "refund_processing",
-                )
-            )
-            pay_result = await session.execute(pay_stmt)
-            payment = pay_result.scalars().first()
-            if payment:
-                matched_order = order
-                matched_payment = payment
-                break
+        matched_order = order_result.scalars().first()
 
         if not matched_order:
-            logger.warning("Reversal result: No matching order in refund_processing state")
-            return {"message": "No matching order found, possibly already processed"}
+            logger.error(f"Reversal result: Found payment but missing Order ID {matched_payment.order_id}")
+            return {"message": "Matching order not found"}
 
         if result_code == 0:
             matched_order.payment_status = "refunded"
@@ -160,21 +154,30 @@ async def reversal_timeout_callback(request: Request, session: AsyncSession = De
         # Extract ConversationID to scope the timeout to a specific order
         conversation_id = data.get("Result", {}).get("ConversationID")
 
-        # Mark only the specific timed-out order back to refund_pending for retry
+        if not conversation_id:
+            return JSONResponse(status_code=400, content={"message": "Missing ConversationID"})
+
+        # EDGE-04 FIX: Find only the specific timed-out order back to refund_pending for retry
         from sqlalchemy.future import select
         from models.order_model import Order
-        stmt = select(Order).where(Order.payment_status == "refund_processing")
-        result = await session.execute(stmt)
-        orders = result.scalars().all()
+        from models.payment_model import Payment
 
-        retried_count = 0
-        for order in orders:
-            order.payment_status = "refund_pending"  # Allow retry on next batch
-            retried_count += 1
+        pay_stmt = select(Payment).where(Payment.reversal_conversation_id == conversation_id)
+        pay_result = await session.execute(pay_stmt)
+        payment = pay_result.scalars().first()
 
-        await session.commit()
-        logger.info(f"Reversal timeout: {retried_count} orders queued for retry")
-        return {"message": f"Timeout processed, {retried_count} refunds queued for retry"}
+        if payment and payment.status == "refund_processing":
+            payment.status = "refund_pending"  # Allow retry
+            
+            order = await session.get(Order, payment.order_id)
+            if order and order.payment_status == "refund_processing":
+                order.payment_status = "refund_pending"
+                
+            await session.commit()
+            logger.info(f"Reversal timeout: Order {payment.order_id} queued for retry")
+            return {"message": f"Timeout processed, refund queued for retry"}
+
+        return {"message": "Timeout processed, no matching active refund found"}
 
     except Exception as e:
         logger.error(f"Error processing reversal timeout callback: {e}")

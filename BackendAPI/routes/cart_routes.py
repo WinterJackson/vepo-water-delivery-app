@@ -128,6 +128,12 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
     from services.order_service import calculate_delivery_fee
     from services.dispatch_policy import DispatchPolicy
     cart = await fetch_detailed_cart(user_id=order.user_id, session=db)
+    if cart and getattr(cart, 'is_locked', False):
+        raise HTTPException(
+            status_code=409, 
+            detail="A checkout is already in progress for this cart. Please wait for the M-PESA prompt or check your orders."
+        )
+
     cart_total = float(cart.total_amount) - float(cart.welcome_discount_amount)
     # Get vendor coordinates for delivery fee calculation 
     if cart.cart_item:
@@ -230,17 +236,27 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
     if server_amount <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be greater than zero")
 
-    response = await initiate_stk_push(phone=order.phone, amount=server_amount)
-    CheckoutRequestID = response.get("CheckoutRequestID")
-    logger.info(f"STK push initiated, CheckoutRequestID: {CheckoutRequestID}, server_amount: {server_amount}")
-    orders = await create_order(session=db, id=order.id, type="cart", CheckoutRequestID=CheckoutRequestID, user_id=order.user_id, phone=order.phone, lat=order.lat, lng=order.lng, delivery_type=order.delivery_type) 
-    if not orders:
-      raise HTTPException(status_code=400 , detail="Orders not created. Something went wrong.")
-    # F-018 & RACE CONDITION FIX: Delay cart deletion until /confirm_payment or /mpesa/callback succeeds.
-    return {
-      "message" : "order created ",
-      "CheckoutRequestID": CheckoutRequestID
-    }
+    # Lock the cart to prevent race conditions during the STK Push window
+    cart.is_locked = True
+    await db.commit()
+
+    try:
+        response = await initiate_stk_push(phone=order.phone, amount=server_amount)
+        CheckoutRequestID = response.get("CheckoutRequestID")
+        logger.info(f"STK push initiated, CheckoutRequestID: {CheckoutRequestID}, server_amount: {server_amount}")
+        orders = await create_order(session=db, id=order.id, type="cart", CheckoutRequestID=CheckoutRequestID, user_id=order.user_id, phone=order.phone, lat=order.lat, lng=order.lng, delivery_type=order.delivery_type) 
+        if not orders:
+            raise HTTPException(status_code=400, detail="Orders not created. Something went wrong.")
+        # F-018 & RACE CONDITION FIX: Delay cart deletion until /confirm_payment or /mpesa/callback succeeds.
+        return {
+          "message": "order created",
+          "CheckoutRequestID": CheckoutRequestID
+        }
+    except Exception as e:
+        # Unlock the cart if STK push fails immediately
+        cart.is_locked = False
+        await db.commit()
+        raise e
 
 class RequestCheckoutRequestID(BaseModel):
   CheckoutRequestID: str  
@@ -352,7 +368,8 @@ async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
             try:
                 from models.user_model import User
                 from services.email_service import send_order_confirmation
-                stmt_user = sa_select(User).where(User.clerk_id == order.customer_id)
+                # EDGE-02 FIX: customer_id is a UUID (User.id), not a Clerk ID
+                stmt_user = sa_select(User).where(User.id == order.customer_id)
                 user_res = await db.execute(stmt_user)
                 customer = user_res.scalars().first()
                 if customer and customer.email:
@@ -399,6 +416,14 @@ async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
                     failure_reason=result_desc,
                 )
                 db.add(payment)
+                
+                # EDGE-01 FIX: Unlock the cart so the user can try again
+                if order:
+                    from services.cart_services import fetch_cart
+                    cart_record = await fetch_cart(user_id=order.customer_id, session=db)
+                    if cart_record:
+                        cart_record.is_locked = False
+                
                 await db.commit()
             except Exception as pay_e:
                 logger.error(f"Error creating failed payment record: {pay_e}")

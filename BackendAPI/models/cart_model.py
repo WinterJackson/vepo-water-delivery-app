@@ -14,6 +14,7 @@ class Cart(Base):
   # vendor_id = Column(UUID(as_uuid=True), ForeignKey("Vendors.id"), index=True)
   items_count = Column(Integer, default=0, nullable=False)
   total_amount = Column(Numeric(10, 2), nullable=False, default=0)
+  is_locked = Column(Boolean, default=False, nullable=False) # EDGE-01 FIX: Prevent modifications during checkout
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())  # F-036 FIX
   updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
   

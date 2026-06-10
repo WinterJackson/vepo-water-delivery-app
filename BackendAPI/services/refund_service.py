@@ -62,6 +62,7 @@ async def process_single_refund(session: AsyncSession, order: Order) -> dict:
     if reversal_result.get("success"):
         order.payment_status = "refund_processing"
         payment.status = "refund_processing"
+        payment.reversal_conversation_id = reversal_result.get("ConversationID")
         await session.commit()
 
         # Notify customer

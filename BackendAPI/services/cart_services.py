@@ -82,6 +82,10 @@ async def add_to_cart_service( user_id: UUID, session: AsyncSession, product_id 
   query = select(Cart).where(Cart.customer_id == user_id).options(selectinload(Cart.cart_item))
   result = await session.execute(query)
   existing_cart =  result.unique().scalar_one_or_none()
+  
+  if existing_cart and getattr(existing_cart, 'is_locked', False):
+      raise HTTPException(status_code=409, detail="Cart is locked during checkout. Please wait for payment to complete.")
+      
   if not existing_cart:
     # create new cart 
     new_cart = Cart(
@@ -168,6 +172,10 @@ async def change_cart_item_quantity_service(user_id: UUID, session: AsyncSession
   cart =  result.unique().scalar_one_or_none()
   if not cart: 
     raise HTTPException(status_code=404, detail="Cart Not Found")
+    
+  if getattr(cart, 'is_locked', False):
+      raise HTTPException(status_code=409, detail="Cart is locked during checkout. Please wait for payment to complete.")
+      
   cart_item = next((item for item in cart.cart_item if str(item.id) == str(id)), None)
   if not cart_item:
     raise HTTPException(status_code=404, detail="Cart item not found")
@@ -201,6 +209,9 @@ async def delete_cart_item_service(cart_item_id: UUID, user_id: UUID, session: A
 
     if cart_item.cart.customer_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this cart item")
+
+    if getattr(cart_item.cart, 'is_locked', False):
+        raise HTTPException(status_code=409, detail="Cart is locked during checkout. Please wait for payment to complete.")
 
     # Update cart totals
     if cart_item.cart:

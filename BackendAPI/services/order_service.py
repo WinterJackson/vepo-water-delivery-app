@@ -70,6 +70,7 @@ WHOLESALE_VENDOR_COMMISSION = 0.025  # 2.5% of product price
 RETAIL_SERVICE_FEE_KSH = 12.0    # Flat service fee for retail orders
 WHOLESALE_SERVICE_FEE_KSH = 50.0
 GIG_RIDER_COMMISSION = 0.10       # 10% of delivery fee
+GIG_PLATINUM_COMMISSION = 0.07    # 7% of delivery fee for Platinum riders
 IN_HOUSE_RIDER_COMMISSION = 0.0   # 0% — vendor owns the fleet
 WHOLESALE_DELIVERY_MARKUP = 0.05  # 5% platform surcharge on wholesale delivery fees
 SURGE_FEE_KSH = 10.0             # KSH 10 surcharge during peak hours
@@ -158,55 +159,67 @@ def calculate_revenue_splits(
     welcome_discount: float = 0.0
 ) -> dict:
     """Calculate platform revenue splits for a single order.
+    FIN-01 FIX: Uses Decimal for currency precision to prevent ledger drift.
     Returns { 'vendor_commission', 'service_fee', 'rider_commission', 'platform_total',
               'vendor_net', 'rider_net', 'surge_fee', 'delivery_markup' }
     """
+    from decimal import Decimal, ROUND_HALF_UP
+
+    # Convert all inputs to Decimal
+    _pt = Decimal(str(product_total))
+    _df = Decimal(str(delivery_fee))
+    _bd = Decimal(str(bottle_deposit))
+    _rs = Decimal(str(rider_surcharges))
+    _wd = Decimal(str(welcome_discount))
+
+    TWO = Decimal("0.01")
+
     # ── Vendor Commission ──
     if vendor_type == "wholesale_b2b":
-        vendor_commission = round(product_total * WHOLESALE_VENDOR_COMMISSION, 2)
-        service_fee = WHOLESALE_SERVICE_FEE_KSH
+        vendor_commission = (_pt * Decimal(str(WHOLESALE_VENDOR_COMMISSION))).quantize(TWO, rounding=ROUND_HALF_UP)
+        service_fee = Decimal(str(WHOLESALE_SERVICE_FEE_KSH))
     else:
-        vendor_commission = round(product_total * RETAIL_VENDOR_COMMISSION, 2)
-        service_fee = RETAIL_SERVICE_FEE_KSH
+        vendor_commission = (_pt * Decimal(str(RETAIL_VENDOR_COMMISSION))).quantize(TWO, rounding=ROUND_HALF_UP)
+        service_fee = Decimal(str(RETAIL_SERVICE_FEE_KSH))
 
     # ── Rider Commission (Gig only; wholesale in-house is exempt) ──
     if vendor_type == "wholesale_b2b":
-        rider_commission = 0.0
+        rider_commission = Decimal("0.00")
     else:
-        commission_rate = 0.12 if delivery_type == "keep_my_bottle" else 0.10
-        rider_commission = round(delivery_fee * commission_rate, 2)
+        commission_rate = Decimal("0.12") if delivery_type == "keep_my_bottle" else Decimal("0.10")
+        rider_commission = (_df * commission_rate).quantize(TWO, rounding=ROUND_HALF_UP)
 
     # ── Wholesale Delivery Markup (5% surcharge on delivery fee) ──
     if vendor_type == "wholesale_b2b":
-        delivery_markup = round(delivery_fee * WHOLESALE_DELIVERY_MARKUP, 2)
+        delivery_markup = (_df * Decimal(str(WHOLESALE_DELIVERY_MARKUP))).quantize(TWO, rounding=ROUND_HALF_UP)
     else:
-        delivery_markup = 0.0
+        delivery_markup = Decimal("0.00")
 
     # ── Surge Pricing (KSH 10 during peak hours) ──
-    surge_fee = SURGE_FEE_KSH if is_surge_active() else 0.0
+    surge_fee = Decimal(str(SURGE_FEE_KSH)) if is_surge_active() else Decimal("0.00")
 
     # ── Platform Total Revenue ──
     # Platform absorbs the welcome discount as a customer acquisition cost
-    platform_total = round(vendor_commission + service_fee + rider_commission + delivery_markup + surge_fee - welcome_discount, 2)
+    platform_total = (vendor_commission + service_fee + rider_commission + delivery_markup + surge_fee - _wd).quantize(TWO, rounding=ROUND_HALF_UP)
 
     # ── Net Payouts ──
     # Wholesale vendors get delivery fee back (they own the fleet)
     if vendor_type == "wholesale_b2b":
-        vendor_net = round(product_total - vendor_commission + delivery_fee + bottle_deposit, 2)
+        vendor_net = (_pt - vendor_commission + _df + _bd).quantize(TWO, rounding=ROUND_HALF_UP)
     else:
-        vendor_net = round(product_total - vendor_commission + bottle_deposit, 2)
+        vendor_net = (_pt - vendor_commission + _bd).quantize(TWO, rounding=ROUND_HALF_UP)
 
-    rider_net = round(delivery_fee - rider_commission + rider_surcharges, 2)
+    rider_net = (_df - rider_commission + _rs).quantize(TWO, rounding=ROUND_HALF_UP)
 
     return {
-        "vendor_commission": vendor_commission,
-        "service_fee": service_fee,
-        "rider_commission": rider_commission,
-        "platform_total": platform_total,
-        "vendor_net": vendor_net,
-        "rider_net": rider_net,
-        "surge_fee": surge_fee,
-        "delivery_markup": delivery_markup,
+        "vendor_commission": float(vendor_commission),
+        "service_fee": float(service_fee),
+        "rider_commission": float(rider_commission),
+        "platform_total": float(platform_total),
+        "vendor_net": float(vendor_net),
+        "rider_net": float(rider_net),
+        "surge_fee": float(surge_fee),
+        "delivery_markup": float(delivery_markup),
     }
 
 
