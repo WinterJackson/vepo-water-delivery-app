@@ -66,7 +66,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "6a3b4c0f-64f2-48b1-8d49-a13fab6a8356"
+      }
     },
     "owner": "wj-kuzzi"
   }
