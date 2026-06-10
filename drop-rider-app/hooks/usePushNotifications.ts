@@ -114,7 +114,7 @@ export function usePushNotifications(queryPrefix: string = 'rider') {
             queryClient.invalidateQueries({ queryKey: [queryPrefix, 'notifications', 'unread-count'] });
         });
 
-        responseListener.current = Notifications.addNotificationResponseReceivedListener((response: import("axios").AxiosResponse) => {
+        responseListener.current = Notifications.addNotificationResponseReceivedListener((response: any) => {
             const data = (response as any).notification.request.content.data;
             if (data?.url) {
                 router.push(data.url as any);

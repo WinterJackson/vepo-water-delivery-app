@@ -13,7 +13,7 @@ import { ClerkAPIError } from "@clerk/types";
 import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
-import { Link, useRouter, useFocusEffect } from "expo-router";
+import { Link, useRouter, useFocusEffect, Redirect } from "expo-router";
 import React, {
     useCallback,
     useContext,
@@ -48,13 +48,9 @@ export default function SignIn() {
 
 	const darkTheme = currentTheme === "dark";
 
-	useFocusEffect(
-		useCallback(() => {
-			if (isLoaded && isSignedIn) {
-				router.replace("/");
-			}
-		}, [isLoaded, isSignedIn])
-	);
+	if (isLoaded && isSignedIn) {
+		return <Redirect href="/" />;
+	}
 
 
 	// <-----------------------<STATES>------------------------>
@@ -139,9 +135,7 @@ export default function SignIn() {
 			success = false
 		} finally {
 			setLoading(false);
-			if (success){
-				setAuthLoading(true)
-			}
+			setAuthLoading(false);
 		}
 	};
 
@@ -184,9 +178,7 @@ export default function SignIn() {
 			if (__DEV__) console.error("OAuth sign-in error:", err);
 			success = false
 		} finally {
-			if(success === false){
-				setAuthLoading(false)
-			}
+			setAuthLoading(false);
 		}
 	}, []);
 

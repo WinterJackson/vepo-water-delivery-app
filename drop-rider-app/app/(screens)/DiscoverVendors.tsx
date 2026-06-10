@@ -88,7 +88,7 @@ export default function DiscoverVendors() {
       v.business_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const activeVendorCount = vendors.filter((v: import("@/types/models").Vendor) => v.status === "pending" || v.status === "approved").length;
+  const activeVendorCount = vendors.filter((v: any) => v.status === "pending" || v.status === "approved").length;
 
   const fetchVendors = async (lat: number, lng: number) => {
     const token = await getToken();
@@ -341,7 +341,7 @@ export default function DiscoverVendors() {
                 {/* 🟢 OSM TILE OVERLAY (Remove this block when using Google Maps) */}
                 {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
                 {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-                {filteredVendors.map((vendor: import("@/types/models").Vendor) => (
+                {filteredVendors.map((vendor: any) => (
                   <Marker
                     key={vendor.id}
                     coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}

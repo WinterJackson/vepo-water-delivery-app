@@ -21,7 +21,7 @@ import { DataFallbackUI } from "@/components/ui/DataFallbackUI";
 let MapView: any = null;
 let Marker: any = null;
 let MarkerAnimated: any = null;
-let GestureHandlerRootView: React.ComponentType<any> | null = null;
+let GestureHandlerRootViewComponent: any = null;
 let Region: any = null; // intentional any for react-native-maps // Add Region to the declarations
 let UrlTile: any = null;
 let PROVIDER_GOOGLE: string | null = null;
@@ -36,7 +36,7 @@ if (Platform.OS !== 'web') {
     UrlTile = maps.UrlTile;
     PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
     const { GestureHandlerRootView: GestureHandlerRootViewImport } = require('react-native-gesture-handler');
-    GestureHandlerRootView = GestureHandlerRootViewImport;
+    GestureHandlerRootViewComponent = GestureHandlerRootViewImport;
 } else {
     // Web mock implementations
     MapView = ({ style, children }: any) => <div style={{ ...style, position: 'relative', width: '100%', height: '400px', backgroundColor: '#e0e0e0' }}>{children}</div>;
@@ -45,7 +45,7 @@ if (Platform.OS !== 'web') {
     Region = function() {}; // Mock Region as empty function for web
     UrlTile = () => null;
     PROVIDER_GOOGLE = 'google';
-    GestureHandlerRootView = ({ children }: any) => <div>{children}</div>;
+    GestureHandlerRootViewComponent = ({ children }: any) => <div>{children}</div>;
 }
 
 import ApiRoutes from "@/API/routes/ApiRoutes";
@@ -966,7 +966,7 @@ const initialRegion: import("@/types/models").MapRegion = {
 				}}
 			>
 
-				<GestureHandlerRootView>
+				<GestureHandlerRootViewComponent>
 					<View
 						
 						style={[animatedMapStyle]}
@@ -1334,7 +1334,7 @@ const initialRegion: import("@/types/models").MapRegion = {
 												</View>
 											</View>
 											<View className={`gap-3`}>
-												{orders && orders.filter((o: import("@/types/models").Order) => o.order_id !== activeSession?.order_id).map((order: import("@/types/models").Order, idx: number) => (
+												{orders && orders.filter((o: any) => o.id !== activeSession?.order_id).map((order: any, idx: number) => (
 													<OrderListItem key={idx} data={order} />
 												))}
 												{(!orders || orders.length === 0) && (
@@ -1358,7 +1358,7 @@ const initialRegion: import("@/types/models").MapRegion = {
 							</View>
 						</GestureDetector>
 					</KeyboardAvoidingView>
-				</GestureHandlerRootView>
+				</GestureHandlerRootViewComponent>
 			</View>
 		</>
 	);

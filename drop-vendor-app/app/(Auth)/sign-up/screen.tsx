@@ -100,7 +100,7 @@ export default function SignUp() {
 			// Set 'pendingVerification' to true to display second form
 			// and capture OTP code
 			setVerification("pending");
-		} catch (err: unknown) {
+		} catch (err: any) {
 			// See https://clerk.com/docs/custom-flows/error-handling
 			// for more info on error handling
 			if (isClerkAPIResponseError(err)) setErrors(err.errors);
@@ -415,7 +415,7 @@ export default function SignUp() {
 										try {
 											await signUp?.prepareEmailAddressVerification({ strategy: "email_code" });
 											Toast.success("Code Resent", "A new verification code has been sent to your email.");
-										} catch (e: unknown) {
+										} catch (e: any) {
 											Toast.error("Error", e?.errors?.[0]?.longMessage || "Failed to resend code.");
 										}
 									}}

@@ -120,7 +120,7 @@ export default function OrderDetail() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     try {
       await updateStatusMutation({ orderId: id as string, status });
-    } catch (e: unknown) {
+    } catch (e: any) {
       if (__DEV__) console.error("Failed to update status", e);
       import("@/lib/toast").then(({ Toast }) => {
         const errMsg = e.response?.data?.detail || (e as Error).message || "Failed to update status. Please check your connection.";

@@ -55,6 +55,7 @@ export default function ScreensLayout() {
         <Stack.Screen name="Notifications" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Cashout" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="SettingsMain" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="OwnerProfile" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="business/StoreProfile" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="business/OperatingHours" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="business/PayoutSettings" options={{ animation: 'slide_from_right' }} />

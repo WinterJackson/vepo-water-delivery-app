@@ -1,6 +1,6 @@
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useAuth, useUser } from "@clerk/clerk-expo";
-import { useRouter } from "expo-router";
+import { useRouter, Redirect } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useContext, useEffect, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -35,6 +35,7 @@ export default function CustomerOnboarding() {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [missingFields, setMissingFields] = useState<string[]>([]);
+    const [readyToRoute, setReadyToRoute] = useState(false);
     
     // Form States
     const [phoneNumber, setPhoneNumber] = useState("");
@@ -52,7 +53,7 @@ export default function CustomerOnboarding() {
                         setMissingFields(data.missing_fields);
                     } else {
                         // Nothing missing, safe to route
-                        router.replace("/(screens)");
+                        setReadyToRoute(true);
                     }
                 }
             } catch (error) {
@@ -98,7 +99,7 @@ export default function CustomerOnboarding() {
             if (res.ok) {
                 Toast.success("Success", "Profile updated successfully!");
                 queryClient.invalidateQueries({ queryKey: ['customer'] });
-                router.replace("/(screens)");
+                setReadyToRoute(true);
             } else {
                 const errorData = await res.json();
                 Toast.error("Error", errorData?.detail || "Failed to update profile");
@@ -109,6 +110,10 @@ export default function CustomerOnboarding() {
             setSubmitting(false);
         }
     };
+
+    if (readyToRoute) {
+        return <Redirect href="/(screens)" />;
+    }
 
     if (loading) {
         return (

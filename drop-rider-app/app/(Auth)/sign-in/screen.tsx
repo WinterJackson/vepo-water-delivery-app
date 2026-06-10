@@ -12,7 +12,7 @@ import { ClerkAPIError } from "@clerk/types";
 import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Location from "expo-location";
-import { Link, useRouter, useFocusEffect } from "expo-router";
+import { Link, useRouter, useFocusEffect, Redirect } from "expo-router";
 import React, {
     useCallback,
     useContext,
@@ -47,13 +47,9 @@ export default function SignIn() {
 
 	const darkTheme = currentTheme === "dark";
 
-	useFocusEffect(
-		useCallback(() => {
-			if (isLoaded && isSignedIn) {
-				router.replace("/");
-			}
-		}, [isLoaded, isSignedIn])
-	);
+	if (isLoaded && isSignedIn) {
+		return <Redirect href="/" />;
+	}
 
 
 	// <-----------------------<STATES>------------------------>
@@ -126,10 +122,7 @@ export default function SignIn() {
 			success = false
 		} finally {
 			setLoading(false);
-			if (success){
-				setAuthLoading(true)
-				router.replace("/")
-			}
+			setAuthLoading(false);
 		}
 	};
 
@@ -160,7 +153,7 @@ export default function SignIn() {
 				if (__DEV__) console.warn("OAuth: No session created. signIn status:", signIn?.status, "signUp status:", signUp?.status);
 				success = false;
 			}
-		} catch (err: unknown) {
+		} catch (err: any) {
 			if (err?.errors?.[0]?.message?.includes("already signed in") || (err as Error)?.message?.includes("already signed in")) {
 				if (__DEV__) console.log("OAuth: User already signed in. Redirecting...");
 				router.replace("/");
@@ -169,11 +162,7 @@ export default function SignIn() {
 			if (__DEV__) console.error("OAuth sign-in error:", err);
 			success = false;
 		} finally {
-			if(success === false){
-				setAuthLoading(false);
-			} else {
-				router.replace("/")
-			}
+			setAuthLoading(false);
 		}
 	}, []);
 

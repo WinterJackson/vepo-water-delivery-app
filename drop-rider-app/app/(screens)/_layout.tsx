@@ -84,6 +84,11 @@ export default function ScreensLayout() {
           <Stack.Screen name="Cashout" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Notifications" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="SettingsMain" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="EarningsHistory" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Performance" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="BottleRejection" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Reviews" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="MyVendors" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="OperationBase" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="DiscoverVendors" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="VerificationWall" options={{ animation: 'slide_from_right' }} />

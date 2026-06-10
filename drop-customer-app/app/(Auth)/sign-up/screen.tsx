@@ -430,7 +430,7 @@ export default function SignUp() {
 										try {
 											await signUp?.prepareEmailAddressVerification({ strategy: "email_code" });
 											Toast.success("Code Resent", "A new verification code has been sent to your email.");
-										} catch (e: unknown) {
+										} catch (e: any) {
 											Toast.error("Error", e?.errors?.[0]?.longMessage || "Failed to resend code.");
 										}
 									}}
