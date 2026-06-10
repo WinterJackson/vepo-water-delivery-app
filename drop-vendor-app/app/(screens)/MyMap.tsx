@@ -31,6 +31,7 @@ let PROVIDER_GOOGLE: string | null = null;
 
 if (Platform.OS !== "web") {
     try {
+        // @ts-ignore
         const maps = require("react-native-maps");
         MapView = maps.default;
         Marker = maps.Marker;
@@ -178,6 +179,7 @@ export default function MyMap() {
             <StatusBar translucent backgroundColor="transparent" barStyle={darkTheme ? "light-content" : "dark-content"} />
             <View style={{ height: Dimensions.get('window').height * 0.5 }}>
                 {MapView ? (
+                    // @ts-ignore
                     <MapView
                         ref={mapRef}
                         provider={undefined}
@@ -193,6 +195,7 @@ export default function MyMap() {
                         customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
                     >
                         {UrlTile && (
+                            // @ts-ignore
                             <UrlTile
                                 urlTemplate={darkTheme
                                     ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"
@@ -201,6 +204,7 @@ export default function MyMap() {
                             />
                         )}
                         {vendorProfile?.lat && vendorProfile?.lng && (
+                            // @ts-ignore
                             <Marker
                                 coordinate={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
                                 title={vendorProfile.business_name || "My Store"}
@@ -209,6 +213,7 @@ export default function MyMap() {
                             />
                         )}
                         {vendorProfile?.lat && vendorProfile?.lng && Circle && (
+                            // @ts-ignore
                             <Circle
                                 center={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
                                 radius={radiusMeters}
@@ -219,6 +224,7 @@ export default function MyMap() {
                         )}
                         {activeOrders.map((order: any, idx: number) =>
                             order.lat && order.lng ? (
+                                // @ts-ignore
                                 <Marker
                                     key={`active-${order.id || idx}`}
                                     coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}
@@ -230,6 +236,7 @@ export default function MyMap() {
                         )}
                         {deliveredOrders.map((order: any, idx: number) =>
                             order.lat && order.lng ? (
+                                // @ts-ignore
                                 <Marker
                                     key={`delivered-${order.id || idx}`}
                                     coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}

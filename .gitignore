@@ -43,6 +43,15 @@ drop-rider-app/ios/
 **/.env.local
 **/.env.production
 
+# ── Build Artifacts ──
+*.apk
+*.aab
+*.ipa
+
+# ── Crash Logs ──
+crash_log.txt
+recent_crash.txt
+
 # ── Misc ──
 .DS_Store
 *.log
