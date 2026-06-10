@@ -90,7 +90,10 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "67eb38b1-5561-4d41-8fa4-e886c2775a46"
+      }
     },
     "owner": "l-bonez"
   }
