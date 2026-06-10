@@ -26,7 +26,7 @@ export interface VendorProfile {
  * Uses cache-busting to prevent stale native networking cache on iOS/Android.
  */
 export function useVendorProfile() {
-    const { getToken, isLoaded, isSignedIn } = useAuth();
+    const { getToken, isLoaded, isSignedIn, signOut } = useAuth();
     return useQuery<VendorProfile, Error>({
         queryKey: ['vendor', 'profile'],
         queryFn: async () => {
@@ -40,6 +40,7 @@ export function useVendorProfile() {
                     'Cache-Control': 'no-cache, no-store, must-revalidate',
                 },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Profile fetch failed: ${res.status}`);
             return res.json();
         },
@@ -52,7 +53,7 @@ export function useVendorProfile() {
  * Optimistically updates the local cache and reverts on error.
  */
 export function useUpdateVendorProfile() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (updates: Partial<VendorProfile>) => {
@@ -66,6 +67,7 @@ export function useUpdateVendorProfile() {
                 },
                 body: JSON.stringify(updates),
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Profile update failed: ${res.status}`);
             return res.json();
         },

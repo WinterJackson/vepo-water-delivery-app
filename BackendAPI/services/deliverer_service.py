@@ -486,6 +486,19 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    # Anti-Fraud: Verify rider is approved by this specific vendor
+    from models.vendor_rider_model import VendorRiderRegistry
+    registry_check = await session.execute(
+        select(VendorRiderRegistry).where(
+            VendorRiderRegistry.rider_id == deliverer.id,
+            VendorRiderRegistry.vendor_id == order.vendor_id,
+            VendorRiderRegistry.status == "approved"
+        )
+    )
+    if not registry_check.scalar_one_or_none():
+        await session.rollback()
+        raise HTTPException(status_code=403, detail="You are not approved by this vendor to deliver their orders.")
+
     # Anti-Fraud: Self-Dealing Prevention
     if order.user and order.user.clerk_id == clerk_id:
         await session.rollback()

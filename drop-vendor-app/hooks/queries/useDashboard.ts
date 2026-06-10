@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import { useQuery } from "@tanstack/react-query";
 
 export function useDashboard() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
 
     return useQuery({
         queryKey: ["vendorDashboard"],
@@ -20,6 +20,7 @@ export function useDashboard() {
                 },
             });
 
+            if (response.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!response.ok) {
                 throw new Error("Failed to fetch dashboard");
             }

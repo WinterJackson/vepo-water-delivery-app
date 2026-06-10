@@ -7,12 +7,12 @@ import {
     DefaultTheme,
     ThemeProvider,
 } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
-import { LogBox, useColorScheme } from "react-native";
+import { LogBox, useColorScheme, AppState, AppStateStatus, Platform } from "react-native";
 import "react-native-gesture-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
             staleTime: 1000 * 60 * 2,
             gcTime: 1000 * 60 * 10,
             retry: 2,
-            refetchOnWindowFocus: false,
+            refetchOnWindowFocus: true, // Enables refetch on app foreground
         },
     },
 });
@@ -60,6 +60,16 @@ export default function Layout() {
         Inter_600SemiBold: require("../assets/fonts/Inter-SemiBold.ttf"),
         Inter_700Bold: require("../assets/fonts/Inter-Bold.ttf"),
     });
+
+    // ── AppState Focus Manager for React Query ──
+    useEffect(() => {
+        const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+            if (Platform.OS !== 'web') {
+                focusManager.setFocused(status === 'active');
+            }
+        });
+        return () => subscription.remove();
+    }, []);
 
     useEffect(() => {
         const prepare = async () => {

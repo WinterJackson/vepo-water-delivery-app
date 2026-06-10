@@ -17,7 +17,7 @@ export interface NotificationItem {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function useNotifications() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<NotificationItem[], Error>({
         queryKey: ['vendor', 'notifications'],
         queryFn: async () => {
@@ -26,6 +26,7 @@ export function useNotifications() {
                 method: VendorApiRoutes.GetNotifications.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store, must-revalidate' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Notifications fetch failed: ${res.status}`);
             return res.json();
         },
@@ -34,7 +35,7 @@ export function useNotifications() {
 }
 
 export function useMarkNotificationRead() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (notificationId: string) => {
@@ -44,6 +45,7 @@ export function useMarkNotificationRead() {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ notification_id: notificationId }),
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Mark read failed: ${res.status}`);
             return res.json();
         },
@@ -54,7 +56,7 @@ export function useMarkNotificationRead() {
 }
 
 export function useMarkAllNotificationsRead() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async () => {
@@ -63,6 +65,7 @@ export function useMarkAllNotificationsRead() {
                 method: VendorApiRoutes.MarkAllNotificationsRead.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Mark all read failed: ${res.status}`);
             return res.json();
         },
@@ -73,7 +76,7 @@ export function useMarkAllNotificationsRead() {
 }
 
 export function useUnreadNotificationCount() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<{ unread_count: number }, Error>({
         queryKey: ['vendor', 'notifications', 'unread-count'],
         queryFn: async () => {
@@ -82,6 +85,7 @@ export function useUnreadNotificationCount() {
                 method: VendorApiRoutes.GetUnreadNotificationCount.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache, no-store, must-revalidate' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Unread count fetch failed: ${res.status}`);
             return res.json();
         },
@@ -90,7 +94,7 @@ export function useUnreadNotificationCount() {
 }
 
 export function useDeleteNotification() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (notificationId: string) => {
@@ -100,6 +104,7 @@ export function useDeleteNotification() {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
             return res.json();
         },

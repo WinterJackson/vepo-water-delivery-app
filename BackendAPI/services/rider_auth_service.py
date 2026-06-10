@@ -17,8 +17,8 @@ async def create_rider(db: AsyncSession, data: CreateDeliverer):
         vehicle_type=data.vehicle_type,
         plate_number=data.plate_number,
         ID_number=data.ID_number,
-        is_active=True,
-        is_verified=True
+        is_active=False,
+        is_verified=False
     )
     db.add(new_rider)
     await db.commit()

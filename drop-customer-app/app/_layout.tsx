@@ -6,13 +6,13 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import ModernToast from '@/components/ui/ModernToast';
 import PopupModal from '@/components/ui/PopupModal';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, focusManager } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Stack } from "expo-router";
 import * as SplashScreen from 'expo-splash-screen';
 import React, { useEffect } from 'react';
-import { Dimensions, LogBox } from "react-native";
+import { Dimensions, LogBox, AppState, AppStateStatus } from "react-native";
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 
@@ -34,7 +34,7 @@ const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 5,       // 5 minutes
       gcTime: 1000 * 60 * 15,         // 15 minutes GC
       retry: 2,
-      refetchOnWindowFocus: false,      // mobile — irrelevant
+      refetchOnWindowFocus: true,     // Enables refetch on app foreground
       networkMode: 'offlineFirst',
     },
     mutations: {
@@ -103,6 +103,16 @@ export default function Layout() {
     'Inter_600SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
     'Inter_700Bold': require('../assets/fonts/Inter-Bold.ttf'),
   });
+
+  // ── AppState Focus Manager for React Query ──
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+      if (Platform.OS !== 'web') {
+        focusManager.setFocused(status === 'active');
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   // <------------------HOOKES------------------>
   const darkTheme = useColorScheme() === "dark"

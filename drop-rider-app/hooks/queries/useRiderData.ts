@@ -61,7 +61,7 @@ export interface RiderProfile {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function useRiderOrders() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderOrder[], Error>({
         queryKey: ['rider', 'orders'],
         queryFn: async () => {
@@ -71,6 +71,7 @@ export function useRiderOrders() {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Rider orders fetch failed: ${res.status}`);
@@ -79,14 +80,14 @@ export function useRiderOrders() {
         },
         staleTime: 1000 * 60,
         retry: (failureCount, error) => {
-            if ((error as Error).message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
             return failureCount < 3;
         }
     });
 }
 
 export function useRiderEarningsHistory() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderOrder[], Error>({
         queryKey: ['rider', 'orders', 'delivered'],
         queryFn: async () => {
@@ -96,6 +97,7 @@ export function useRiderEarningsHistory() {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Earnings history fetch failed: ${res.status}`);
@@ -103,11 +105,15 @@ export function useRiderEarningsHistory() {
             return res.json();
         },
         staleTime: 1000 * 60 * 5, // Cache longer since historical data changes rarely
+        retry: (failureCount, error) => {
+            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
+            return failureCount < 3;
+        }
     });
 }
 
 export function useTripRadar() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderOrder[], Error>({
         queryKey: ['rider', 'trip_radar'],
         queryFn: async () => {
@@ -116,6 +122,7 @@ export function useTripRadar() {
                 method: RiderApiRoutes.TripRadar.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Trip radar fetch failed: ${res.status}`);
@@ -124,14 +131,14 @@ export function useTripRadar() {
         },
         staleTime: 1000 * 5,
         retry: (failureCount, error) => {
-            if ((error as Error).message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
             return failureCount < 3;
         }
     });
 }
 
 export function useRiderEarnings() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderEarnings, Error>({
         queryKey: ['rider', 'earnings'],
         queryFn: async () => {
@@ -140,6 +147,7 @@ export function useRiderEarnings() {
                 method: RiderApiRoutes.GetEarnings.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Earnings fetch failed: ${res.status}`);
@@ -148,14 +156,14 @@ export function useRiderEarnings() {
         },
         staleTime: 1000 * 30,
         retry: (failureCount, error) => {
-            if ((error as Error).message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
             return failureCount < 3;
         }
     });
 }
 
 export function useRiderProfile() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderProfile, Error>({
         queryKey: ['rider', 'profile'],
         queryFn: async () => {
@@ -164,6 +172,7 @@ export function useRiderProfile() {
                 method: RiderApiRoutes.GetProfile.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Profile fetch failed: ${res.status}`);
@@ -172,14 +181,14 @@ export function useRiderProfile() {
         },
         staleTime: 1000 * 60 * 2,
         retry: (failureCount, error) => {
-            if ((error as Error).message === "404_NOT_FOUND") return false;
+            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
             return failureCount < 3;
         }
     });
 }
 
 export function useAcceptOrder() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (orderId: string) => {
@@ -189,6 +198,7 @@ export function useAcceptOrder() {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Accept order failed: ${res.status}`);
             return res.json();
         },
@@ -200,7 +210,7 @@ export function useAcceptOrder() {
 }
 
 export function useCompleteDelivery() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (orderId: string) => {
@@ -211,6 +221,7 @@ export function useCompleteDelivery() {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ status: 'delivered' }),
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Complete delivery failed: ${res.status}`);
             return res.json();
         },
@@ -239,7 +250,7 @@ export interface RiderReviewsResponse {
 }
 
 export function useRiderReviews() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     return useQuery<RiderReviewsResponse, Error>({
         queryKey: ['rider', 'reviews'],
         queryFn: async () => {
@@ -249,9 +260,14 @@ export function useRiderReviews() {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
+            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) throw new Error(`Rider reviews fetch failed: ${res.status}`);
             return res.json();
         },
         staleTime: 1000 * 60 * 5, // 5 minutes
+        retry: (failureCount, error) => {
+            if ((error as Error).message === "401_UNAUTHORIZED") return false;
+            return failureCount < 3;
+        }
     });
 }

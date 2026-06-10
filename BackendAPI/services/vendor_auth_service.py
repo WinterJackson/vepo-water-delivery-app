@@ -21,7 +21,7 @@ async def create_vendor(db: AsyncSession, data: CreateVendor):
         location_address=data.location_address,
         lat=data.lat,
         lng=data.lng,
-        verification_status="verified"
+        verification_status="pending"
     )
     if data.shift_start is not None:
         new_vendor.shift_start = data.shift_start

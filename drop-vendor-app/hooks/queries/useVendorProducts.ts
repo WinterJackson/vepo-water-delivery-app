@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
 
 export function useVendorProducts(searchQuery: string = "", stockFilter: string = "All", limit: number = 20) {
-	const { getToken } = useAuth();
+	const { getToken, signOut } = useAuth();
 
 	return useInfiniteQuery({
 		queryKey: ["vendorProducts", searchQuery, stockFilter, limit],
@@ -34,6 +34,7 @@ export function useVendorProducts(searchQuery: string = "", stockFilter: string 
 				},
 			});
 
+            if (response.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
 			if (!response.ok) {
 				throw new Error("Network response was not ok");
 			}

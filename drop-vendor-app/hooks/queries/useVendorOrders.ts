@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export function useVendorOrdersPaginated(searchQuery: string = "", statusFilter: string = "All", limit: number = 20) {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
 
     return useInfiniteQuery({
         queryKey: ["vendorOrdersPaginated", searchQuery, statusFilter, limit],
@@ -35,6 +35,7 @@ export function useVendorOrdersPaginated(searchQuery: string = "", statusFilter:
                 },
             });
 
+            if (response.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!response.ok) {
                 throw new Error("Failed to fetch orders");
             }
@@ -51,7 +52,7 @@ export function useVendorOrdersPaginated(searchQuery: string = "", statusFilter:
 }
 
 export function useVendorOrders() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
 
     return useQuery({
         queryKey: ["vendorOrders"],
@@ -68,6 +69,7 @@ export function useVendorOrders() {
                 },
             });
 
+            if (response.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!response.ok) {
                 throw new Error("Failed to fetch orders");
             }
@@ -86,7 +88,7 @@ export function useVendorOrders() {
 }
 
 export function useUpdateOrderStatus() {
-    const { getToken } = useAuth();
+    const { getToken, signOut } = useAuth();
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -102,6 +104,7 @@ export function useUpdateOrderStatus() {
                 body: JSON.stringify({ status }),
             });
 
+            if (response.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!response.ok) {
                 throw new Error("Failed to update status");
             }

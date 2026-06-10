@@ -5,11 +5,11 @@ import PopupModal from '@/components/ui/PopupModal';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
-import { useColorScheme, LogBox } from "react-native";
+import { useColorScheme, LogBox, AppState, AppStateStatus, Platform } from "react-native";
 import { configureReanimatedLogger, ReanimatedLogLevel } from 'react-native-reanimated';
 import { useFonts } from 'expo-font';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
@@ -35,7 +35,7 @@ const queryClient = new QueryClient({
       staleTime: 1000 * 60 * 2,
       gcTime: 1000 * 60 * 10,
       retry: 2,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true, // Enables refetch on app foreground
     },
   },
 });
@@ -79,6 +79,16 @@ export default function Layout() {
     'Inter_600SemiBold': require('../assets/fonts/Inter-SemiBold.ttf'),
     'Inter_700Bold': require('../assets/fonts/Inter-Bold.ttf'),
   });
+
+  // ── AppState Focus Manager for React Query ──
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (status: AppStateStatus) => {
+      if (Platform.OS !== 'web') {
+        focusManager.setFocused(status === 'active');
+      }
+    });
+    return () => subscription.remove();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
