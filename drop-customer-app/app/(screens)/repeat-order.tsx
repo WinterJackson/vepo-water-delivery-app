@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { View, Text, ScrollView, StatusBar, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StatusBar } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';

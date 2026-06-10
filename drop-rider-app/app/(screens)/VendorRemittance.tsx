@@ -5,7 +5,6 @@ import { Toast } from "@/lib/toast";
 import { useAuth } from "@clerk/clerk-expo";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
-    ActivityIndicator,
     Alert,
     RefreshControl,
     ScrollView,

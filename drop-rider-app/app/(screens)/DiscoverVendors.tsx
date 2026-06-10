@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState, useCallback, useRef } from "react";
-import { View, Text, StatusBar, FlatList, RefreshControl, Image, TextInput, Switch, Platform, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StatusBar, FlatList, RefreshControl, Image, TextInput, Switch, Platform, TouchableOpacity } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useAuth } from "@clerk/clerk-expo";

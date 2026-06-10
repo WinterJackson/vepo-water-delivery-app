@@ -7,7 +7,6 @@ import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { BRAND } from "@/constants/brandColors";
 import {
-    ActivityIndicator,
     RefreshControl,
     ScrollView,
     StatusBar,
