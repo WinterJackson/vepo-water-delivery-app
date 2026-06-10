@@ -7,7 +7,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import { Stack, usePathname, useRouter, Redirect } from "expo-router";
 import { useContext } from "react";
 import { PressableScale } from "@/components/ui/PressableScale";
-import { Dimensions, View, ActivityIndicator, Text } from "react-native";
+import { Dimensions, View, Text } from "react-native";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from "@tanstack/react-query";
 import RiderApiRoutes from "@/API/routes/RiderApiRoutes";

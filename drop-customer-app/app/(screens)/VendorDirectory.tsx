@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { View, Text, ScrollView, StatusBar, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, StatusBar, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UIThemeContext } from '@/context/ThemeContext';

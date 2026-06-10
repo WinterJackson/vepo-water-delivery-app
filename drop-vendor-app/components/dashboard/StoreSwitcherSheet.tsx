@@ -1,11 +1,13 @@
 import React, { forwardRef, useCallback, useContext, useImperativeHandle, useMemo, useRef } from 'react';
-import { View, Text, ActivityIndicator } from 'react-native';
+import { View, Text } from 'react-native';
 import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import { UIThemeContext } from '@/context/ThemeContext';
 import { BRAND } from '@/constants/brandColors';
 import { useVendorStores } from '@/hooks/queries/useVendorProfile';
 import PressableScale from '@/components/ui/PressableScale';
 import { Ionicons } from '@expo/vector-icons';
+
+import { Skeleton } from '@/components/ui/Skeleton';
 
 export interface StoreSwitcherSheetRef {
   open: () => void;
@@ -74,9 +76,9 @@ const StoreSwitcherSheet = forwardRef<StoreSwitcherSheetRef, StoreSwitcherSheetP
 
           {/* Store List */}
           {isLoading ? (
-            <View className="items-center justify-center py-8">
-              <ActivityIndicator size="large" color={BRAND.primary} />
-              <Text className={`mt-3 text-sm ${darkTheme ? 'text-gray-400' : 'text-gray-500'}`}>Loading stores...</Text>
+            <View className="items-center justify-center py-4 w-full gap-2">
+              <Skeleton width="100%" height={76} borderRadius={16} />
+              <Skeleton width="100%" height={76} borderRadius={16} />
             </View>
           ) : !stores || stores.length === 0 ? (
             <View className="items-center justify-center py-8">

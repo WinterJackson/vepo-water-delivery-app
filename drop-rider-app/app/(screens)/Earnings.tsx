@@ -3,7 +3,6 @@ import { UIThemeContext } from "@/context/ThemeContext";
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useContext } from "react";
 import {
-    ActivityIndicator,
     RefreshControl,
     ScrollView, StatusBar,
     Text,
