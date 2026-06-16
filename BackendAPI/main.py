@@ -84,10 +84,29 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from routes.websocket_routes import manager
+    import asyncio
+    from arq.worker import Worker
+    from worker import WorkerSettings
+
+    # Start WebSocket PubSub
     await manager.start_pubsub()
+
+    # Start ARQ Worker as a background task
+    kwargs = {k: v for k, v in WorkerSettings.__dict__.items() if not k.startswith('_')}
+    arq_worker = Worker(**kwargs)
+    arq_task = asyncio.create_task(arq_worker.main())
+    
     yield
+    
+    # Graceful shutdown
     if manager.pubsub_task:
         manager.pubsub_task.cancel()
+    
+    arq_task.cancel()
+    try:
+        await arq_task
+    except asyncio.CancelledError:
+        pass
 
 app = FastAPI(title="Drop Water Delivery API", version="1.0.0", lifespan=lifespan)
 
