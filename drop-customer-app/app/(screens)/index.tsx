@@ -13,6 +13,8 @@ import { useUserDetails } from "@/hooks/queries/useUser";
 import { useNearByVendors, useTopBrandsVendors, useTopRatedVendors } from "@/hooks/queries/useVendors";
 import { useLocation } from "@/hooks/useLocation";
 import { useUnreadNotificationCount } from "@/hooks/queries/useNotifications";
+import { useActiveOrder } from "@/hooks/queries/useOrders";
+import useWebSocket from "@/hooks/useWebSocket";
 import { useAuth, useUser } from "@clerk/clerk-expo";
 import { Image as ExpoImage } from "expo-image";
 import { useRouter } from "expo-router";
@@ -129,6 +131,16 @@ export default function Home() {
 	const { data: NearByVendors = [], isLoading: _nLoad, isFetched: _nFetch, refetch: r1 } = useNearByVendors();
 	const NearbyVendorsLoaded = !_nLoad;
 
+	const { data: activeOrder, refetch: rActive } = useActiveOrder();
+
+	const handleOrderUpdate = useCallback((payload: any) => {
+		if (payload.action === "ORDER_STATUS_UPDATE" || payload.action === "ORDER_ASSIGNED") {
+			rActive();
+		}
+	}, [rActive]);
+
+	useWebSocket('customer', user?.id || "", handleOrderUpdate);
+
 	const { data: TopRatedVendors = [], isLoading: _tLoad, refetch: r2 } = useTopRatedVendors();
 	const TopRatedVendorsLoaded = !_tLoad;
 
@@ -137,6 +149,7 @@ export default function Home() {
 
 	const { data: Offers = [], isLoading: offersLoad, refetch: r7 } = useProductsWithOffer();
 	const OffersLoaded = !offersLoad;
+
 
 	// Random products (pagination)
 	const [page, setPage] = useState(1);
@@ -174,13 +187,13 @@ export default function Home() {
 		setPaginatedProducts([]);
 		setHasMore(true);
 		try {
-			await Promise.all([r1(), r2(), r6(), r7(), refetchProducts()]);
+			await Promise.all([r1(), r2(), r6(), r7(), rActive(), refetchProducts()]);
 		} catch (error) {
 			if (__DEV__) console.error("Refresh failed", error);
 		} finally {
 			setRefreshing(false);
 		}
-	}, [r1, r2, r6, r7, refetchProducts]);
+	}, [r1, r2, r6, r7, rActive, refetchProducts]);
 
 	// <---------------VARIABLES---------------->
 	const renderProductItem: ListRenderItem<any> = useCallback(
@@ -319,6 +332,31 @@ export default function Home() {
 						}
 						ListHeaderComponent={
 							<View className="gap-1 pb-4">
+									{/* Active Order Banner */}
+									{activeOrder && (
+										<PressableScale
+											activeOpacity={0.8}
+											onPress={() => router.push({ pathname: "/(screens)/OrderDetail", params: { orderId: activeOrder.id } })}
+										>
+											<View className={`mx-5 mb-4 p-4 rounded-2xl flex-row items-center justify-between ${darkTheme ? "bg-blue-900/40 border border-blue-500/30" : "bg-blue-50 border border-blue-200"}`}>
+												<View className="flex-row items-center gap-3">
+													<View className={`w-10 h-10 rounded-full items-center justify-center ${darkTheme ? "bg-blue-500/20" : "bg-blue-100"}`}>
+														<Ionicons name="bicycle" size={20} color={BRAND.primary} />
+													</View>
+													<View>
+														<Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-gray-900"}`}>
+															Active Order
+														</Text>
+														<Text className={`text-xs ${darkTheme ? "text-blue-300" : "text-blue-600"}`}>
+															Tap to track your delivery
+														</Text>
+													</View>
+												</View>
+												<Ionicons name="chevron-forward" size={20} color={BRAND.primary} />
+											</View>
+										</PressableScale>
+									)}
+
 									<FavouritesList />
 
 									<BentoCategories />

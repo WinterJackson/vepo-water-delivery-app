@@ -19,8 +19,8 @@ def safe_serialize(obj) -> dict:
     result = {}
     for col in obj.__table__.columns:
         val = getattr(obj, col.name, None)
-        # Skip any spatial or binary types entirely
-        if isinstance(val, _SKIP_TYPES):
+        # Skip spatial/binary types and highly sensitive encrypted PII
+        if isinstance(val, _SKIP_TYPES) or col.name in ("ID_number", "account_details"):
             continue
         if val is None:
             result[col.name] = None

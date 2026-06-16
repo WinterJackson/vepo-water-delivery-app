@@ -4,8 +4,9 @@ from fastapi import HTTPException
 @dataclass
 class DispatchPolicy:
     RETAIL_MAX_DISTANCE_KM: float = 2.0
-    WHOLESALE_MAX_DISTANCE_KM: float = 10.0  # Kept at 10km for operational efficiency (rider search radius)
-    RIDER_REGISTRATION_MAX_RADIUS_KM: float = 2.0
+    WHOLESALE_MAX_DISTANCE_KM: float = 15.0  # Upgraded to 15km for city-wide logistics
+    RETAIL_RIDER_REGISTRATION_MAX_RADIUS_KM: float = 2.0
+    WHOLESALE_RIDER_REGISTRATION_MAX_RADIUS_KM: float = 15.0
     WHOLESALE_MOQ_KG: float = 100.0  # Mandatory 100kg+ MOQ
 
     # Pricing & Capacity Engine

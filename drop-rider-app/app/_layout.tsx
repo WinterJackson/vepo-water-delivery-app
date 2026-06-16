@@ -82,6 +82,7 @@ export default function Layout() {
             } finally {
                 if (fontsLoaded) {
                     await SplashScreen.hideAsync();
+                    import('../utils/sentry').then(({ initSentry }) => initSentry());
                 }
             }
         };

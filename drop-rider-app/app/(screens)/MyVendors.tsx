@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, Text, StatusBar, FlatList, RefreshControl, Image, TouchableOpacity, ActivityIndicator } from "react-native";
+import { View, Text, StatusBar, FlatList, RefreshControl, Image, TouchableOpacity, ActivityIndicator, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useAuth } from "@clerk/clerk-expo";
@@ -12,6 +12,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { FlashList as OriginalFlashList } from "@shopify/flash-list";
 import { Popup } from "@/lib/popup";
 import { RiderDiscoverVendorCardSkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const FlashList = OriginalFlashList as any;
 
@@ -25,11 +26,15 @@ export default function MyVendors() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
-  const fetchRegisteredVendors = async () => {
+  const fetchRegisteredVendors = async (search?: string) => {
     const token = await getToken();
     try {
-      const res = await fetch(RiderApiRoutes.RegisteredVendors.path, {
+      const route = RiderApiRoutes.RegisteredVendors(search);
+      const res = await fetch(route.path, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -48,12 +53,12 @@ export default function MyVendors() {
   };
 
   useEffect(() => {
-    fetchRegisteredVendors();
-  }, []);
+    fetchRegisteredVendors(debouncedSearchQuery);
+  }, [debouncedSearchQuery]);
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchRegisteredVendors();
+    fetchRegisteredVendors(debouncedSearchQuery);
   };
 
   const handleWithdraw = async (vendorId: string, businessName: string) => {
@@ -203,7 +208,22 @@ export default function MyVendors() {
       </View>
 
       {/* Content */}
-      {loading ? (
+      <View style={{ flex: 1 }}>
+        {/* Search Bar */}
+        <View className="px-5 pt-2 pb-4">
+          <View className={`flex-row items-center px-4 py-3 rounded-2xl ${darkTheme ? "bg-white/5" : "bg-white border border-gray-100 shadow-sm"}`}>
+              <Ionicons name="search" size={20} color={BRAND.primary} />
+              <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search your vendors..."
+                  placeholderTextColor={darkTheme ? "#9ca3af" : "#6b7280"}
+                  className={`flex-1 font-semibold ml-2 ${darkTheme ? "text-white" : "text-black"}`}
+              />
+          </View>
+        </View>
+
+        {loading ? (
         <View className="flex-1 px-4 pt-4">
            {[1, 2, 3, 4, 5].map(i => <RiderDiscoverVendorCardSkeleton key={i} />)}
         </View>
@@ -245,6 +265,7 @@ export default function MyVendors() {
           />
         </View>
       )}
+      </View>
     </SafeAreaView>
   );
 }

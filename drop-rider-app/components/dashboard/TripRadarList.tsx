@@ -51,7 +51,7 @@ export default function TripRadarList({ orders, isLoading }: TripRadarListProps)
           <View className={`w-12 h-12 rounded-full items-center justify-center mb-3 ${darkTheme ? "bg-blue-900/20" : "bg-blue-50"}`}>
             <Ionicons name="planet-outline" size={24} color={BRAND.primary} />
           </View>
-          <Text className={`font-bold text-base mb-1 ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>Scanning for gigs...</Text>
+          <Text className={`font-bold text-base mb-1 ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>Scanning for orders...</Text>
           <Text className={`text-xs text-center px-4 ${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>
             There are currently no delivery requests in your area. Keep your app open to receive new requests.
           </Text>
@@ -93,7 +93,7 @@ export default function TripRadarList({ orders, isLoading }: TripRadarListProps)
           >
             <View className="flex-row justify-between items-start mb-2">
               <Text className={`font-black text-xl ${darkTheme ? "text-white" : "text-black"}`}>
-                KSH {order.total_price.toLocaleString()}
+                KSH {Number(order?.total_amount ?? 0).toString()}
               </Text>
             </View>
 

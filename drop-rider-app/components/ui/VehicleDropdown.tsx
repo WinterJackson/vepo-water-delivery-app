@@ -22,7 +22,8 @@ interface VehicleDropdownProps {
     onValueChange: (value: string) => void;
     label?: string;
     placeholder?: string;
-    style?: string;
+    containerStyle?: any;
+    buttonStyle?: any;
 }
 
 const VehicleDropdown: React.FC<VehicleDropdownProps> = ({ 
@@ -30,7 +31,8 @@ const VehicleDropdown: React.FC<VehicleDropdownProps> = ({
     onValueChange, 
     label, 
     placeholder = "Select Vehicle Type",
-    style = ""
+    containerStyle,
+    buttonStyle
 }) => {
     const { currentTheme } = useContext(UIThemeContext);
     const darkTheme = currentTheme === "dark";
@@ -63,7 +65,7 @@ const VehicleDropdown: React.FC<VehicleDropdownProps> = ({
     };
 
     return (
-        <View className={`mb-4 w-[90%] max-w-[350px] ${style}`}>
+        <View className={containerStyle ? "" : "mb-4 w-[90%] max-w-[350px]"} style={containerStyle}>
             {label && (
                 <Text className={`font-semibold mb-2 ml-2 text-base ${darkTheme ? "text-gray-300" : "text-gray-700"}`}>
                     {label}
@@ -73,7 +75,8 @@ const VehicleDropdown: React.FC<VehicleDropdownProps> = ({
             <PressableScale 
                 activeOpacity={0.8}
                 onPress={() => setModalVisible(true)}
-                className={`flex-row items-center border ${darkTheme ? "border-gray-100/20 bg-gray-200/20" : "border-gray-500 bg-gray-100"} rounded-full h-[50px] px-5`}
+                className={`flex-row items-center border ${darkTheme ? "border-gray-100/20 bg-gray-200/20" : "border-gray-500 bg-gray-100"} ${buttonStyle ? "" : "rounded-full h-[50px] px-5"}`}
+                style={buttonStyle}
             >
                 {selectedOption ? (
                     <>

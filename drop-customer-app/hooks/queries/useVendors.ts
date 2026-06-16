@@ -94,14 +94,21 @@ export function useTopBrandsVendors() {
         staleTime: 5 * 60 * 1000
     });
 }
-export function useVendorDirectory() {
+export function useVendorDirectory(searchQuery: string = '', filter: string = 'all') {
     const { getToken } = useAuth();
     return useQuery({
-        queryKey: ['vendors', 'directory'],
+        queryKey: ['vendors', 'directory', searchQuery, filter],
         queryFn: async () => {
             const token = await getToken();
             if (!token) return [];
-            const res = await fetch(`${ROUTES.GET_VENDORS}/directory`, {
+            
+            const params = new URLSearchParams();
+            if (searchQuery) params.append('search_query', searchQuery);
+            if (filter) params.append('vendor_type', filter);
+            
+            const url = `${ROUTES.GET_VENDORS}/directory?${params.toString()}`;
+            
+            const res = await fetch(url, {
                 method: "GET",
                 headers: { Authorization: `Bearer ${token}` }
             });

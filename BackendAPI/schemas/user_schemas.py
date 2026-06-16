@@ -27,6 +27,17 @@ class BasicUser(BaseUser):
     
     model_config = {"from_attributes": True}
 
+class CustomerPublicProfile(BaseModel):
+    id: UUID
+    full_name : str | None = None
+    phone_number : str | None = None
+    location_address: str | None = None
+    floor_level: int | None = 0
+    has_elevator: bool | None = False
+    profile_pic : str | None = None
+
+    model_config = {"from_attributes": True}
+
 class CreateUserResponse(BaseModel):
     message: str
     data: BaseUser

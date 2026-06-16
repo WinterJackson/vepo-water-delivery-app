@@ -18,6 +18,7 @@ import { RiderDiscoverVendorCardSkeleton } from "@/components/skeletons/Contextu
 import { darkMapStyle, standardMapStyle } from "@/constants/mapStyles";
 import { trackEvent } from "@/utils/analytics";
 import { Popup } from "@/lib/popup";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const FlashList = OriginalFlashList as any;
 
@@ -84,18 +85,20 @@ export default function DiscoverVendors() {
   
   const { mutedVendors, toggleVendorMute } = useRiderStore();
 
-  const filteredVendors = vendors.filter((v: import("@/types/models").Vendor) =>
-      v.business_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
   const activeVendorCount = vendors.filter((v: any) => v.status === "pending" || v.status === "approved").length;
 
-  const fetchVendors = async (lat: number, lng: number) => {
+  const fetchVendors = async (lat: number, lng: number, search?: string) => {
     const token = await getToken();
     try {
-      const route = RiderApiRoutes.DiscoverVendors(lat, lng);
+      const route = RiderApiRoutes.DiscoverVendors(lat, lng, search);
       const res = await fetch(route.path, {
-        headers: { Authorization: `Bearer ${token}` }
+        method: route.method,
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       if (res.ok) {
         const data = await res.json();
@@ -110,7 +113,7 @@ export default function DiscoverVendors() {
     try {
       if (profile?.operation_lat && profile?.operation_lng) {
         setUserLocation({ latitude: profile.operation_lat, longitude: profile.operation_lng });
-        await fetchVendors(profile.operation_lat, profile.operation_lng);
+        await fetchVendors(profile.operation_lat, profile.operation_lng, debouncedSearchQuery);
         return;
       }
 
@@ -122,10 +125,10 @@ export default function DiscoverVendors() {
       }
       const location = await Location.getCurrentPositionAsync({});
       setUserLocation(location.coords);
-      await fetchVendors(location.coords.latitude, location.coords.longitude);
+      await fetchVendors(location.coords.latitude, location.coords.longitude, debouncedSearchQuery);
     } catch (e) {
        // fallback generic coordinates if location fails
-       await fetchVendors(-1.2921, 36.8219);
+       await fetchVendors(-1.2921, 36.8219, debouncedSearchQuery);
     } finally {
        setLoadingLoc(false);
     }
@@ -138,13 +141,16 @@ export default function DiscoverVendors() {
   }, [isProfileLoading]);
 
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery.trim().length > 1) {
-        trackEvent('rider_discover_search', { query: searchQuery.trim(), count: filteredVendors.length });
-      }
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, filteredVendors.length]);
+    if (userLocation) {
+        fetchVendors(userLocation.latitude, userLocation.longitude, debouncedSearchQuery);
+    }
+  }, [debouncedSearchQuery]);
+
+  useEffect(() => {
+    if (debouncedSearchQuery.trim().length > 1) {
+      trackEvent('rider_discover_search', { query: debouncedSearchQuery.trim() });
+    }
+  }, [debouncedSearchQuery]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -313,13 +319,13 @@ export default function DiscoverVendors() {
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 // 🟢 FREE OPEN SOURCE MVP MODE (CartoDB / OSM tiles)
                 //    Uses provider={undefined} + UrlTile overlay
-                provider={undefined}
+                // provider={undefined}
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
                 // 🔴 PRODUCTION GOOGLE MAPS MODE
                 //    Swap the line above for this one:
-                // provider={PROVIDER_GOOGLE}
+                provider={PROVIDER_GOOGLE}
+                mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
                 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-                customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
                 zoomControlEnabled={false}
                 showsUserLocation={true}
                 showsMyLocationButton={false}
@@ -339,9 +345,9 @@ export default function DiscoverVendors() {
               >
                 {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
                 {/* 🟢 OSM TILE OVERLAY (Remove this block when using Google Maps) */}
-                {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
+                {/* {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />} */}
                 {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-                {filteredVendors.map((vendor: any) => (
+                {vendors.map((vendor: any) => (
                   <Marker
                     key={vendor.id}
                     coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}
@@ -379,7 +385,7 @@ export default function DiscoverVendors() {
           </View>
         ) : (
           <FlashList
-            data={filteredVendors}
+            data={vendors}
             keyExtractor={(item: any) => item.id}
             renderItem={renderVendorCard}
             contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 120 }}

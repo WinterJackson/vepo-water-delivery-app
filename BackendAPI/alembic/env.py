@@ -34,6 +34,7 @@ from models.vendor_model import Vendor
 from models.saved_location_model import SavedLocation
 from models.deliverer_vendor_model import DelivererVendor
 from models.bottle_rejection_model import BottleRejectionTicket
+from models.failed_webhook_model import FailedWebhook
 
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
@@ -63,14 +64,24 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=include_object
     )
 
     with context.begin_transaction():
         context.run_migrations()
 
 
+def include_object(object, name, type_, reflected, compare_to):
+    if type_ == "table" and name == "spatial_ref_sys":
+        return False
+    return True
+
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection, 
+        target_metadata=target_metadata,
+        include_object=include_object
+    )
 
     with context.begin_transaction():
         context.run_migrations()

@@ -67,6 +67,19 @@ const RiderApiRoutes = {
     path: `${BASE_URL}/api/payouts`,
     method: "GET",
   } as const satisfies ApiRoute,
+  // --- Wallet ---
+  WalletTopUp: {
+    path: `${BASE_URL}/api/wallet/top-up`,
+    method: "POST",
+  } as const satisfies ApiRoute,
+  WalletWithdraw: {
+    path: `${BASE_URL}/api/wallet/withdraw`,
+    method: "POST",
+  } as const satisfies ApiRoute,
+  GetTransactions: {
+    path: `${BASE_URL}/api/wallet/transactions`,
+    method: "GET",
+  } as const satisfies ApiRoute,
   // --- Notifications ---
   GetNotifications: {
     path: `${BASE_URL}/api/notifications?user_type=rider`,
@@ -93,6 +106,10 @@ const RiderApiRoutes = {
     path: `${BASE_URL}/api/rider/orders/${orderId}/reject`,
     method: "PUT",
   }),
+  CancelOrder: (orderId: string): ApiRoute => ({
+    path: `${BASE_URL}/api/rider/orders/${orderId}/cancel`,
+    method: "PUT",
+  }),
   ReportMismatch: (orderId: string): ApiRoute => ({
     path: `${BASE_URL}/api/rider/orders/${orderId}/mismatch`,
     method: "POST",
@@ -105,24 +122,27 @@ const RiderApiRoutes = {
     path: `${BASE_URL}/api/rider/orders/${orderId}/accept`,
     method: "POST",
   }),
-  // --- Vendor Remittance ---
-  GetMyRemittances: (delivererId: string): ApiRoute => ({
-    path: `${BASE_URL}/api/vendor_remittance/rider/${delivererId}`,
-    method: "GET",
-  }),
-  CloseRemittance: (remittanceId: string): ApiRoute => ({
-    path: `${BASE_URL}/api/vendor_remittance/${remittanceId}/close`,
-    method: "POST",
-  }),
   // --- Vendor Registry ---
-  DiscoverVendors: (lat: number, lng: number): ApiRoute => ({
-    path: `${BASE_URL}/api/rider/discover-vendors?lat=${lat}&lng=${lng}`,
-    method: "GET",
-  }),
-  RegisteredVendors: {
-    path: `${BASE_URL}/api/rider/registered-vendors`,
-    method: "GET",
-  } as const satisfies ApiRoute,
+  DiscoverVendors: (lat: number, lng: number, searchQuery: string = ""): ApiRoute => {
+    const params = new URLSearchParams();
+    params.append('lat', lat.toString());
+    params.append('lng', lng.toString());
+    if (searchQuery) params.append('search_query', searchQuery);
+    
+    return {
+      path: `${BASE_URL}/api/rider/discover-vendors?${params.toString()}`,
+      method: "GET",
+    };
+  },
+  RegisteredVendors: (searchQuery: string = ""): ApiRoute => {
+    const params = new URLSearchParams();
+    if (searchQuery) params.append('search_query', searchQuery);
+    
+    return {
+      path: `${BASE_URL}/api/rider/registered-vendors${searchQuery ? '?' + params.toString() : ''}`,
+      method: "GET",
+    };
+  },
   WithdrawApplication: (vendorId: string): ApiRoute => ({
     path: `${BASE_URL}/api/rider/vendor-application/${vendorId}`,
     method: "DELETE",

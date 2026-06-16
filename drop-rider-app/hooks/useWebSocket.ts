@@ -90,8 +90,8 @@ const useWebSocket = (
       }
     };
 
-    ws.onclose = () => {
-      if (__DEV__) console.log('WebSocket disconnected');
+    ws.onclose = (event) => {
+      if (__DEV__) console.log('WebSocket disconnected', event?.code, event?.reason);
       setConnected(false);
       wsRef.current = null;
       
@@ -139,9 +139,15 @@ const useWebSocket = (
       } else if (nextAppState.match(/inactive|background/)) {
         if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
         if (wsRef.current) {
+          // Nullify handlers BEFORE close to prevent onclose from spawning zombie reconnects
+          wsRef.current.onclose = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onopen = null;
           wsRef.current.close();
           wsRef.current = null;
         }
+        setConnected(false);
       }
       appState.current = nextAppState;
     });
@@ -152,6 +158,11 @@ const useWebSocket = (
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
+        // Prevent onclose from triggering a reconnect when intentionally unmounting/cleaning up
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onopen = null;
         wsRef.current.close();
         wsRef.current = null;
       }

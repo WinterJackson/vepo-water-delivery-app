@@ -93,6 +93,7 @@ export default function Layout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+      import('../utils/sentry').then(({ initSentry }) => initSentry());
     }
   }, [fontsLoaded]);
 

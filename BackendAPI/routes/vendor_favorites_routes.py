@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.dependencies import get_db
-from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_customer
 from services.vendor_favorites_service import (
     get_vendor_favorites,
     add_vendor_favorite,
@@ -20,7 +20,7 @@ class VendorFavoriteRequest(BaseModel):
 @router.get("/")
 async def list_vendor_favorites(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Get all vendor favorites for the current user."""
     clerk_id = user["sub"]
@@ -31,7 +31,7 @@ async def list_vendor_favorites(
 async def add_to_vendor_favorites(
     body: VendorFavoriteRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Add a vendor to the user's favorites."""
     clerk_id = user["sub"]
@@ -42,7 +42,7 @@ async def add_to_vendor_favorites(
 async def remove_from_vendor_favorites(
     body: VendorFavoriteRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Remove a vendor from the user's favorites."""
     clerk_id = user["sub"]
@@ -53,7 +53,7 @@ async def remove_from_vendor_favorites(
 async def vendor_last_order(
     vendor_id: str,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Get the most recent order to a specific vendor for quick reorder."""
     clerk_id = user["sub"]

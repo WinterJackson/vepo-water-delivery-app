@@ -89,6 +89,7 @@ const Layout = () => {
             <Stack.Screen name="Notifications" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="PaymentHistory" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="BottleWallet" options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="Transactions" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="OrderDetail" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="SettingsMain" options={{ animation: 'slide_from_right' }} />
             <Stack.Screen name="VendorDirectory" options={{ animation: 'slide_from_right' }} />

@@ -17,10 +17,33 @@ except Exception as e:
     logger.error(f"Failed to initialize Redis connection pool: {e}")
     redis_pool = None
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+# Global Redis-backed Rate Limiter
+redis_limiter = Limiter(
+    key_func=get_remote_address, 
+    default_limits=["100/minute"],
+    storage_uri=REDIS_URL
+)
+
 def get_redis() -> Optional[redis.Redis]:
     if not redis_pool:
         return None
     return redis.Redis(connection_pool=redis_pool)
+
+_arq_pool = None
+
+async def get_arq_pool():
+    global _arq_pool
+    if not _arq_pool:
+        try:
+            from arq import create_pool
+            from arq.connections import RedisSettings
+            _arq_pool = await create_pool(RedisSettings.from_dsn(REDIS_URL))
+        except Exception as e:
+            logger.error(f"Failed to initialize ARQ pool: {e}")
+    return _arq_pool
 
 async def cache_get(key: str) -> Optional[Any]:
     r = get_redis()
@@ -34,12 +57,61 @@ async def cache_get(key: str) -> Optional[Any]:
         logger.warning(f"Redis GET error for key '{key}': {e}")
     return None
 
+
+import uuid
+from datetime import datetime, date
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def redis_lock(lock_key: str, timeout_seconds: int = 10):
+    """
+    Simple distributed lock using Redis setnx.
+    Usage:
+        async with redis_lock("my_lock") as acquired:
+            if not acquired:
+                # Handle lock failure
+    """
+    r = get_redis()
+    if not r:
+        # If Redis is down, we fail open (or closed, depending on requirements. Here we fail open to allow DB to handle it)
+        yield True
+        return
+
+    # Generate a random token to ensure we only delete our own lock
+    token = str(uuid.uuid4())
+    acquired = await r.set(lock_key, token, ex=timeout_seconds, nx=True)
+    
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            # Only release if the token matches (Lua script for atomicity)
+            script = """
+            if redis.call("get", KEYS[1]) == ARGV[1] then
+                return redis.call("del", KEYS[1])
+            else
+                return 0
+            end
+            """
+            try:
+                await r.eval(script, 1, lock_key, token)
+            except Exception as e:
+                logger.error(f"Error releasing Redis lock '{lock_key}': {e}")
+
+class CustomJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, uuid.UUID):
+            return str(obj)
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        return super().default(obj)
+
 async def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> bool:
     r = get_redis()
     if not r:
         return False
     try:
-        val_str = json.dumps(value)
+        val_str = json.dumps(value, cls=CustomJSONEncoder)
         await r.setex(key, ttl_seconds, val_str)
         return True
     except Exception as e:

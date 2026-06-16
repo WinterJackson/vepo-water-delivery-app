@@ -53,8 +53,12 @@ const useWebSocket = (
   // This means useCallback never produces a new reference, so the useEffect never re-fires.
   const connect = useCallback(async () => {
     if (!mountedRef.current) return;
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (!entityIdRef.current) return;
+    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+    if (attemptRef.current >= MAX_RECONNECT_ATTEMPTS) {
+        if (__DEV__) console.warn('WebSocket max reconnect attempts reached, stopping.');
+        return;
+    }
 
     try {
         const token = await getTokenRef.current();
@@ -91,6 +95,11 @@ const useWebSocket = (
       wsRef.current = null;
       
       if (!mountedRef.current) return;
+      
+      // Stop reconnecting if the app is in the background to save battery
+      if (appState.current.match(/inactive|background/)) {
+          return;
+      }
 
       // BUG-WS-FE-02 FIX: Exponential backoff with jitter, capped at MAX_RECONNECT_ATTEMPTS
       attemptRef.current += 1;
@@ -105,8 +114,9 @@ const useWebSocket = (
       reconnectTimeoutRef.current = setTimeout(connect, delay);
     };
 
-    ws.onerror = (error) => {
-      if (__DEV__) console.error('WebSocket error:', error);
+    ws.onerror = () => {
+      // Errors are expected during reconnection cycles — handled silently in production.
+      // The onclose handler will trigger the reconnect logic.
     };
 
     wsRef.current = ws;
@@ -118,29 +128,37 @@ const useWebSocket = (
 
   // FIX-WS-RERENDER-04: Only connect when entityId actually becomes available.
   // Previously this depended on `connect` which changed on every render.
+  const appState = useRef(AppState.currentState);
+
   useEffect(() => {
     if (!entityId) return; // Don't connect until we have a real ID
     
+    attemptRef.current = 0;
     connect();
 
     // DOMAIN-3: AppState listener to freeze/restore WS on background/foreground
     const handleAppState = (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        // Restore connection when foregrounded
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          attemptRef.current = 0; // Reset backoff
-          connect();
-        }
-      } else if (nextState === 'background') {
+      if (appState.current.match(/inactive|background/) && nextState === 'active') {
+        // Only reconnect on genuine background→active transition
+        attemptRef.current = 0;
+        connect();
+      } else if (nextState.match(/inactive|background/)) {
         // Freeze connection when backgrounded to save battery
         if (reconnectTimeoutRef.current) {
           clearTimeout(reconnectTimeoutRef.current);
         }
         if (wsRef.current) {
+          // Nullify handlers BEFORE close to prevent onclose from spawning zombie reconnects
+          wsRef.current.onclose = null;
+          wsRef.current.onerror = null;
+          wsRef.current.onmessage = null;
+          wsRef.current.onopen = null;
           wsRef.current.close();
           wsRef.current = null;
         }
+        setConnected(false);
       }
+      appState.current = nextState;
     };
     const subscription = AppState.addEventListener('change', handleAppState);
 
@@ -150,6 +168,10 @@ const useWebSocket = (
         clearTimeout(reconnectTimeoutRef.current);
       }
       if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onopen = null;
         wsRef.current.close();
         wsRef.current = null;
       }

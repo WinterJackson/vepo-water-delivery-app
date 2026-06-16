@@ -15,6 +15,7 @@ import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { Popup } from "@/lib/popup";
 import { BRAND } from "@/constants/brandColors";
 import { Image } from "expo-image";
+import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
 
 const RiderCard = memo(({ 
   item, 
@@ -41,9 +42,9 @@ const RiderCard = memo(({
       <View className="flex-row items-center">
         <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-gray-900"}`}>{item.name}</Text>
         {item.is_available ? (
-           <View className="ml-2 w-2 h-2 rounded-full bg-[#10b981]" />
+           <View className="ml-2 w-2 h-2 rounded-full bg-green-500" />
         ) : (
-           <View className="ml-2 w-2 h-2 rounded-full bg-[#f59e0b]" />
+           <View className="ml-2 w-2 h-2 rounded-full bg-amber-500" />
         )}
       </View>
       <Text className={`text-sm font-semibold ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>{item.phone_number}</Text>
@@ -91,13 +92,13 @@ const RiderCard = memo(({
            </>
          )}
          {item.status === "approved" && (
-             <PressableScale disabled={actioningRider === item.deliverer_id} onPress={() => handleAction(item.deliverer_id, "suspend")} className={`flex-1 py-3 rounded-[16px] ${actioningRider === item.deliverer_id ? "bg-[#f59e0b]/5" : "bg-[#f59e0b]/10"} border border-[#f59e0b]/20 items-center`}>
-               <Text className="text-[#f59e0b] font-bold text-sm uppercase tracking-wider">{actioningRider === item.deliverer_id ? "..." : "Suspend Access"}</Text>
+             <PressableScale disabled={actioningRider === item.deliverer_id} onPress={() => handleAction(item.deliverer_id, "suspend")} className={`flex-1 py-3 rounded-[16px] ${actioningRider === item.deliverer_id ? "bg-amber-500/5" : "bg-amber-500/10"} border border-amber-500/20 items-center`}>
+               <Text className="text-amber-500 font-bold text-sm uppercase tracking-wider">{actioningRider === item.deliverer_id ? "..." : "Suspend Access"}</Text>
              </PressableScale>
          )}
          {item.status === "suspended" && (
-             <PressableScale disabled={actioningRider === item.deliverer_id} onPress={() => handleAction(item.deliverer_id, "approve")} className={`flex-1 py-3 rounded-[16px] ${actioningRider === item.deliverer_id ? "bg-[#10b981]/5" : "bg-[#10b981]/10"} border border-[#10b981]/20 items-center`}>
-               <Text className="text-[#10b981] font-bold text-sm uppercase tracking-wider">{actioningRider === item.deliverer_id ? "..." : "Restore Access"}</Text>
+             <PressableScale disabled={actioningRider === item.deliverer_id} onPress={() => handleAction(item.deliverer_id, "approve")} className={`flex-1 py-3 rounded-[16px] ${actioningRider === item.deliverer_id ? "bg-green-500/5" : "bg-green-500/10"} border border-green-500/20 items-center`}>
+               <Text className="text-green-500 font-bold text-sm uppercase tracking-wider">{actioningRider === item.deliverer_id ? "..." : "Restore Access"}</Text>
              </PressableScale>
          )}
       </View>
@@ -110,6 +111,14 @@ export default function RiderManagement() {
   const darkTheme = currentTheme === "dark";
   const { getToken } = useAuth();
   const router = useRouter();
+  const { data: vendorProfile } = useVendorProfile();
+
+  React.useEffect(() => {
+      if (vendorProfile?.role === "staff") {
+          Toast.error("Access Denied", "Staff members cannot access Rider Management.");
+          router.replace("/(screens)");
+      }
+  }, [vendorProfile]);
   
   const [riders, setRiders] = useState<any[]>([]);
   const [initialLoading, setInitialLoading] = useState(true);

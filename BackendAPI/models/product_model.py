@@ -40,6 +40,7 @@ class Product(Base):
   __table_args__ = (
       Index('idx_product_category_available', 'category', 'is_available', 'created_at'),
       Index('idx_product_discount_created', 'discount', 'created_at'),
+      Index('idx_products_search_vector', 'search_vector', postgresql_using='gin'),
   )
   id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4, index=True)
   vendor_id = Column(UUID(as_uuid=True), ForeignKey("Vendors.id"), index=True)

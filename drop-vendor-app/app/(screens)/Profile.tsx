@@ -1,6 +1,6 @@
 import { UIThemeContext } from "@/context/ThemeContext";
-import { useContext } from "react";
-import { useUser } from "@clerk/clerk-expo";
+import React, { useContext, useState } from "react";
+import { useUser, useAuth } from "@clerk/clerk-expo";
 import * as Haptics from "expo-haptics";
 import {
     ScrollView,
@@ -8,6 +8,7 @@ import {
     Text,
     View,
     TouchableOpacity,
+    ActivityIndicator
 } from "react-native";
 import { Image } from "expo-image";
 import { BRAND } from "@/constants/brandColors";
@@ -16,36 +17,152 @@ import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
+import * as ImagePicker from 'expo-image-picker';
+import { useQueryClient } from "@tanstack/react-query";
+import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
+import { Toast } from "@/lib/toast";
+import { Popup } from "@/lib/popup";
 
 export default function Profile() {
   const { currentTheme, setTheme } = useContext(UIThemeContext);
   const darkTheme = currentTheme === "dark";
   const { user } = useUser();
+  const { getToken, signOut } = useAuth();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const { data: vendor } = useVendorProfile();
   const isStaff = vendor?.role === "staff";
+  const [imageUploading, setImageUploading] = useState(false);
 
-  const NavItem = ({ icon, label, description, path }: { icon: any, label: string, description: string, path: string }) => (
+  const pickImage = async () => {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+          Popup.show({
+              title: 'Permission Denied',
+              message: 'Camera roll permissions are required to change your store picture.',
+              isAlertOnly: true
+          });
+          return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.5,
+          base64: true
+      });
+
+      if (!result.canceled && result.assets[0].base64) {
+          setImageUploading(true);
+          try {
+              const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+              const token = await getToken();
+              
+              const res = await fetch(VendorApiRoutes.UpdateProfile.path, {
+                  method: VendorApiRoutes.UpdateProfile.method,
+                  headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({ profile_pic: base64 }),
+              });
+
+              if (res.ok) {
+                  Toast.success("Success", "Store picture updated successfully");
+                  queryClient.invalidateQueries({ queryKey: ["vendorDashboard"] });
+                  queryClient.invalidateQueries({ queryKey: ["vendorProfile"] });
+              } else {
+                  throw new Error("Upload failed");
+              }
+          } catch (err) {
+              if (__DEV__) console.error("Upload error:", err);
+              Toast.error("Upload Failed", "Could not update store picture.");
+          } finally {
+              setImageUploading(false);
+          }
+      }
+  };
+
+  const handleSignOut = () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Popup.show({
+          title: "Secure Logout",
+          message: "Are you sure you want to sign out? Your store will remain active, but you won't receive immediate push notifications or be able to accept live orders until you securely log back in.",
+          cancelText: "Cancel",
+          confirmText: "Sign Out",
+          isDestructive: true,
+          onConfirm: async () => {
+              Popup.setLoading(true);
+              try {
+                  await signOut();
+                  Popup.hide();
+                  router.replace("/(Auth)");
+              } catch (error) {
+                  if (__DEV__) console.error("Sign out error", error);
+                  Popup.hide();
+              }
+          }
+      });
+  };
+
+  const handleDeleteAccount = () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Popup.show({
+          title: "Delete Vendor Account",
+          message: "Your store profile, bank details, and personal identifiers will be permanently removed. Your store will immediately go offline. Past payouts and orders will be irreversibly anonymized for financial auditing. You cannot recover this account. Do you wish to proceed?",
+          cancelText: "Cancel",
+          confirmText: "Delete",
+          isDestructive: true,
+          onConfirm: async () => {
+              Popup.setLoading(true);
+              try {
+                  const res = await fetch(VendorApiRoutes.DeleteAccount.path, {
+                      method: VendorApiRoutes.DeleteAccount.method,
+                      headers: {
+                          Authorization: `Bearer ${await getToken()}`,
+                          "Content-Type": "application/json",
+                      },
+                      body: JSON.stringify({ app_type: "vendor", confirmation: "DELETE MY ACCOUNT" })
+                  });
+
+                  if (res.ok) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      Toast.success("Goodbye", "Store deleted successfully.");
+                      await signOut();
+                      Popup.hide();
+                      router.replace("/(Auth)");
+                  } else {
+                      const data = await res.json();
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      Popup.show({ title: "Cannot Delete", message: data.detail || "You have active orders preventing deletion." });
+                  }
+              } catch (error) {
+                  Popup.show({ title: "Error", message: "Network error occurred." });
+              }
+          }
+      });
+  };
+
+  const NavItem = ({ icon, label, description, path, onPress, danger }: { icon: any, label: string, description: string, path?: string, onPress?: () => void, danger?: boolean }) => (
     <TouchableOpacity
       activeOpacity={0.7}
       onPress={() => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push(path as any);
+        if (onPress) onPress();
+        else if (path) router.push(path as any);
       }}
-      className={`rounded-3xl p-5 mb-3 flex-row items-center border ${darkTheme ? "bg-surface-container" : "bg-white border-gray-100"}`}
+      className={`rounded-3xl p-5 mb-3 flex-row items-center border ${danger ? (darkTheme ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-100") : (darkTheme ? "bg-surface-container" : "bg-white border-gray-100")}`}
       style={darkTheme ? {} : { 
         ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) 
       }}
     >
-      <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-        <Ionicons name={icon} size={24} color={BRAND.primary} />
+      <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${danger ? "bg-red-500/20" : (darkTheme ? "bg-slate-800" : "bg-white")}`}>
+        <Ionicons name={icon} size={24} color={danger ? "#ef4444" : BRAND.primary} />
       </View>
       <View className="flex-1">
-        <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>{label}</Text>
+        <Text className={`text-lg font-bold ${danger ? "text-red-500" : (darkTheme ? "text-white" : "text-slate-900")}`}>{label}</Text>
         <Text className={`text-sm mt-1 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>{description}</Text>
       </View>
-      <Ionicons name="chevron-forward" size={24} color={BRAND.primary} />
+      <Ionicons name={path ? "chevron-forward" : "chevron-forward"} size={24} color={danger ? "#ef4444" : BRAND.primary} />
     </TouchableOpacity>
   );
 
@@ -87,22 +204,39 @@ export default function Profile() {
       <ScrollView className="px-5" contentContainerStyle={{ paddingBottom: 120 }}>
         {/* Hub Header */}
         <View className="items-center pt-8 pb-8">
-          <View 
-            className={`w-28 h-28 rounded-full items-center justify-center mb-4 border-[3px] p-1 ${darkTheme ? "bg-surface-container" : "bg-white"}`}
-            style={{
-              borderColor: BRAND.primary,
-              ...(darkTheme ? {} : {
-                ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
-              })
-            }}
-          >
-            <View className={`w-full h-full rounded-full items-center justify-center overflow-hidden ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-              {vendor?.profile_pic ? (
-                <Image source={{ uri: vendor.profile_pic }} style={{ width: "100%", height: "100%" }} cachePolicy="disk" transition={200} />
-              ) : (
-                <Ionicons name="storefront-outline" size={40} color={BRAND.primary} />
-              )}
+          <View className="relative">
+            <View 
+              className={`w-28 h-28 rounded-full items-center justify-center mb-4 border-[3px] p-1 ${darkTheme ? "bg-surface-container" : "bg-white"}`}
+              style={{
+                borderColor: BRAND.primary,
+                ...(darkTheme ? {} : {
+                  ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
+                })
+              }}
+            >
+              <View className={`w-full h-full rounded-full items-center justify-center overflow-hidden ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
+                {vendor?.profile_pic ? (
+                  <Image source={{ uri: vendor.profile_pic }} style={{ width: "100%", height: "100%" }} cachePolicy="disk" transition={200} />
+                ) : (
+                  <Ionicons name="storefront-outline" size={40} color={BRAND.primary} />
+                )}
+                {imageUploading && (
+                    <View className="absolute inset-0 bg-black/40 items-center justify-center">
+                        <ActivityIndicator color="#fff" size="small" />
+                    </View>
+                )}
+              </View>
             </View>
+            {!isStaff && (
+                <TouchableOpacity 
+                    onPress={pickImage}
+                    disabled={imageUploading}
+                    className="absolute bottom-5 right-1 rounded-full items-center justify-center border-[2.5px]"
+                    style={{ width: 36, height: 36, backgroundColor: BRAND.primary, borderColor: darkTheme ? "#000" : "#fff", zIndex: 10 }}
+                >
+                    <Ionicons name="camera" size={18} color="#fff" />
+                </TouchableOpacity>
+            )}
           </View>
           <Text className={`text-2xl font-bold text-center ${darkTheme ? "text-white" : "text-slate-900"}`}>
             {vendor?.business_name || "Settings Hub"}
@@ -114,34 +248,23 @@ export default function Profile() {
 
         <Text className={`mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>Account & Identity</Text>
         
-        {!isStaff && (
-          <>
-            <NavItem 
-              icon="storefront-outline" 
-              label="Store Profile" 
-              description="Manage public store details and operations" 
-              path="/(screens)/StoreProfile" 
-            />
-            
-            <NavItem 
-              icon="person-circle-outline" 
-              label="Owner Profile" 
-              description="Manage personal KYC and sign-in details" 
-              path="/(screens)/OwnerProfile" 
-            />
-          </>
-        )}
-
-        <Text className={`mt-6 mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>Business Tools</Text>
+        <NavItem 
+          icon="storefront-outline" 
+          label="Store Profile" 
+          description="View public store details and operations" 
+          path="/(screens)/StoreProfile" 
+        />
         
         {!isStaff && (
           <NavItem 
-            icon="wallet-outline" 
-            label="Wallet & Cashout" 
-            description="Manage your earnings and payouts" 
-            path="/(screens)/Cashout" 
+            icon="person-circle-outline" 
+            label="Owner Profile" 
+            description="Manage personal KYC and sign-in details" 
+            path="/(screens)/OwnerProfile" 
           />
         )}
+
+        <Text className={`mt-6 mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>Business Tools</Text>
         
         <NavItem 
           icon="map-outline" 
@@ -151,10 +274,17 @@ export default function Profile() {
         />
 
         <NavItem 
-          icon="key-outline" 
-          label="Vendor Remittances" 
-          description="Verify pickup remittances" 
-          path="/(screens)/VendorRemittanceDashboard" 
+          icon="wallet-outline" 
+          label="Digital Wallet" 
+          description="Manage funds and float balance" 
+          path="/(screens)/WalletScreen" 
+        />
+
+        <NavItem 
+          icon="water-outline" 
+          label="Bottle Reconciliation" 
+          description="Clear empty bottle debt with riders" 
+          path="/(screens)/BottleReconciliation" 
         />
         
         {!isStaff && (
@@ -169,11 +299,21 @@ export default function Profile() {
         <Text className={`mt-6 mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>System & Security</Text>
         
         <NavItem 
-          icon="options-outline" 
-          label="Advanced Settings" 
-          description="Manage operating hours, payouts, and sign out" 
-          path="/(screens)/SettingsMain" 
+          icon="log-out-outline" 
+          label="Sign Out" 
+          description="Securely log out of your account" 
+          onPress={handleSignOut} 
         />
+        
+        {!isStaff && (
+          <NavItem 
+            icon="trash-outline" 
+            label="Delete Store" 
+            description="Permanently erase your account and data" 
+            onPress={handleDeleteAccount} 
+            danger={true}
+          />
+        )}
       </ScrollView>
     </SafeAreaView>
   );

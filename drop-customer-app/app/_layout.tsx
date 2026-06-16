@@ -20,7 +20,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import ThemeContextProvider from '../context/ThemeContext';
-// import { initSentry } from '../utils/sentry'; // Temporarily disabled due to peer dependency installation conflicts
+import { initSentry } from '../utils/sentry';
 import OfflineBanner from '../components/ui/OfflineBanner';
 import "../global.css";
 import { initAnalytics } from '../utils/analytics';
@@ -124,7 +124,7 @@ export default function Layout() {
     }
 
     // Production tools
-    // initSentry();
+    initSentry();
     initAnalytics(null as any);
     checkForAppUpdate(process.env.EXPO_PUBLIC_BACKEND_BASE_URL || "");
   }, [fontsLoaded]);

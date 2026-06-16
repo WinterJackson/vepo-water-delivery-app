@@ -181,7 +181,8 @@ export default function Cart() {
 			user_id: User?.id,
 			lat: User?.lat ?? 0,
 			lng: User?.lng ?? 0,
-			delivery_type: deliveryType
+			delivery_type: deliveryType,
+			payment_method: PaymentMethod || "mpesa"
 		}
 		try {
 			const apiCall = await fetch(ApiRoutes.Checkout.path, {
@@ -205,6 +206,17 @@ export default function Cart() {
 				setPaymentLoading(false);
 				return;
 			}
+			
+			if (response.payment_method === "cash") {
+				// Cash orders are completed immediately without polling
+				fetch_cart()
+				fetchCart()
+				setPaymentLoading(false)
+				setCheckoutVisible(false)
+				router.push("/(screens)/order-confirmation")
+				return;
+			}
+			
 			setCheckoutRequestID(response.CheckoutRequestID)
 			fetch_cart()
 			fetchCart()
@@ -692,17 +704,19 @@ export default function Cart() {
 															</View>
 														</TouchableOpacity>
 
-														{/* VISA (Coming Soon) */}
+														{/* Cash on Delivery */}
 														<TouchableOpacity
-															activeOpacity={1}
+															activeOpacity={0.6}
 															className="flex-1 h-[60px] justify-center items-center max-w-[160px]"
+															onPress={() => {
+																setPaymentMethod("cash")
+																nextPage()
+																setModalPage(2)
+															}}
 														>
-															<View className={`w-full h-full justify-center items-center rounded-2xl ${darkTheme ? "bg-slate-800" : "bg-white"} overflow-hidden`}>
-																<Text className={`font-bold text-lg ${darkTheme ? "text-slate-400" : "text-slate-400"}`}>VISA</Text>
-																{/* Coming Soon Badge */}
-																<View className="absolute top-0 right-0 bg-accentbg px-2 py-0.5 rounded-bl-lg rounded-tr-xl">
-																	<Text className="text-[9px] font-bold text-white uppercase">Coming Soon</Text>
-																</View>
+															<View className={`w-full h-full justify-center items-center rounded-2xl border ${darkTheme ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
+																<Ionicons name="cash-outline" size={24} color={BRAND.primary} />
+																<Text className={`font-bold mt-1 text-xs ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>Cash on Delivery</Text>
 															</View>
 														</TouchableOpacity>
 													</View>
@@ -777,6 +791,50 @@ export default function Cart() {
 																				</View>
 																			) : (
 																				<Text className={`font-bold text-xl ${darkTheme?"":"text-white"}`}>Continue</Text>
+																			)}
+																		</View>
+																	</TouchableOpacity>
+																</View>
+															</View>
+														)
+													}
+													{
+														PaymentMethod == "cash" && (
+															<View className={`w-full items-center gap-4 px-6`}>
+																<View className={`w-16 h-16 rounded-full items-center justify-center mb-2 ${darkTheme ? "bg-slate-800" : "bg-green-50"}`}>
+																	<Ionicons name="cash" size={32} color={BRAND.primary} />
+																</View>
+																<Text className={`text-xl font-bold text-center ${darkTheme ? "text-white" : "text-slate-900"}`}>
+																	Pay with Cash
+																</Text>
+																<Text className={`text-center text-base mb-4 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
+																	You will pay <Text className="font-bold">KSH {finalTotal.toFixed(2)}</Text> in cash to the rider upon delivery.
+																</Text>
+																
+																<View className={` flex-row justify-center gap-3 w-full`}>
+																	<TouchableOpacity
+																		disabled={PaymentLoading}
+																		activeOpacity={0.6}
+																		onPress={()=>{
+																			prevPage()
+																			setModalPage(1)
+																		}}
+																	>
+																		<BackButtonMinimal />
+																	</TouchableOpacity>
+																	<TouchableOpacity
+																		disabled={PaymentLoading}
+																		activeOpacity={0.6}
+																		onPress={()=>{
+																			Checkout()
+																		}}
+																		className="flex-1"
+																	>
+																		<View className={`h-[50px] w-full items-center justify-center rounded-full bg-green-500`}>
+																			{PaymentLoading ? (
+																				<ActivityIndicator size="small" color={BRAND.white} />
+																			) : (
+																				<Text className={`font-bold text-lg text-white`}>Place Order</Text>
 																			)}
 																		</View>
 																	</TouchableOpacity>

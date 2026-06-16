@@ -4,15 +4,16 @@ import { UIThemeContext } from "@/context/ThemeContext";
 import useWebSocket from "@/hooks/useWebSocket";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from '@expo/vector-icons';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
+import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from "expo-location";
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, useMemo } from "react";
 import {
     Dimensions, Linking, Platform,
     Text,
     View,
-    Modal, ScrollView, TouchableOpacity, StatusBar
+    Modal, ScrollView, TouchableOpacity, StatusBar,
+    TextInput
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BRAND, TOAST } from "@/constants/brandColors";
@@ -82,6 +83,7 @@ export default function ActiveDelivery() {
   const { data: orders = [], isLoading } = useRiderOrders();
 
   const [activeOrder, setActiveOrder] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentLocation, setCurrentLocation] = useState<any>(null);
   const [routeCoords, setRouteCoords] = useState<any[]>([]);
   const locationSubscription = useRef<any>(null);
@@ -89,6 +91,7 @@ export default function ActiveDelivery() {
   const riderId = useRiderStore((s) => s.riderId);
   const { mutateAsync: rejectDelivery, isPending: isRejecting } = useRejectDelivery();
   const [emptiesReceived, setEmptiesReceived] = useState<number>(0);
+  const [sheetIndex, setSheetIndex] = useState<number>(0);
 
   // Cross-party contact info
   const { data: contactsData } = useOrderContacts(activeOrder?.id || null, activeOrder?.order_status || null);
@@ -111,23 +114,38 @@ export default function ActiveDelivery() {
     ? (activeOrder?.order_item?.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0) || 0)
     : 0;
 
-  // Sync activeOrder with fetched orders array
-  useEffect(() => {
-    const active = orders.find(
-      (o: any) => ["pending", "picked_up", "accepted", "ready", "mismatch_pending", "pending_review"].includes(o.order_status)
+  // Sync activeOrder with fetched orders array and allow search
+  const activeOrdersList = useMemo(() => {
+    let list = orders.filter((o: any) => 
+        ["pending", "picked_up", "accepted", "ready", "mismatch_pending", "pending_review", "in_transit"].includes(o.order_status)
     );
-    // Only update state if it genuinely changed to avoid infinite loops with optimistic updates
-    if (active) {
-       if (!activeOrder || activeOrder.id !== active.id || activeOrder.order_status !== active.order_status) {
-          setActiveOrder(active);
+    if (searchQuery) {
+        const lowerQ = searchQuery.toLowerCase();
+        list = list.filter((o: any) => 
+            (o.id && o.id.toLowerCase().includes(lowerQ)) ||
+            (o.user?.name && o.user.name.toLowerCase().includes(lowerQ)) ||
+            (o.vendor?.business_name && o.vendor.business_name.toLowerCase().includes(lowerQ))
+        );
+    }
+    return list;
+  }, [orders, searchQuery]);
+
+  useEffect(() => {
+    if (activeOrdersList.length > 0) {
+       const stillExists = activeOrdersList.find((o: any) => o.id === activeOrder?.id);
+       if (stillExists) {
+           if (stillExists.order_status !== activeOrder?.order_status) {
+               setActiveOrder(stillExists);
+           }
+       } else {
+           setActiveOrder(activeOrdersList[0]);
        }
     } else {
-       // Keep optimistic 'delivered' or 'null' when no active orders match
        if (activeOrder && !["delivered"].includes(activeOrder.order_status)) {
           setActiveOrder(null);
        }
     }
-  }, [orders]);
+  }, [activeOrdersList, activeOrder?.id, activeOrder?.order_status]);
 
   useEffect(() => {
     if (activeOrder) {
@@ -274,6 +292,7 @@ export default function ActiveDelivery() {
     
     // 🔥 Optimistic UI Update: Flip the UI state BEFORE network response
     const previousStatus = activeOrder.order_status;
+    const previousOrder = { ...activeOrder };
     setActiveOrder({ ...activeOrder, order_status: status });
     
     // For delivered status, clear immediately for the feeling of extreme speed bypassing lag loops completely
@@ -306,6 +325,8 @@ export default function ActiveDelivery() {
         if (res.status >= 400 && res.status < 500) {
           const err = await res.json().catch(() => ({}));
           Toast.error("Update Failed", err.detail || "Could not update delivery status.");
+          // Rollback optimistic update on backend rejection
+          setActiveOrder({ ...previousOrder, order_status: previousStatus });
           return;
         }
         throw new Error("Sync Failed Offline");
@@ -317,6 +338,8 @@ export default function ActiveDelivery() {
     } catch (e) {
       // Execute the Offline Queue mapping deterministically rather than rolling back explicitly
       if (status !== "delivered") {
+        // Rollback optimistic state for non-delivered since we're queuing for later
+        setActiveOrder({ ...previousOrder, order_status: previousStatus });
         await queueOfflineAction(activeOrder.id, "UPDATE_DELIVERY_STATUS", JSON.stringify({ status }));
       }
     }
@@ -407,6 +430,45 @@ export default function ActiveDelivery() {
     }
   };
 
+  const [showCancelSheet, setShowCancelSheet] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const [cancelReason, setCancelReason] = useState<string>("other");
+  const [cancelDetails, setCancelDetails] = useState<string>("");
+
+  const cancelDelivery = async () => {
+    if (!activeOrder) return;
+    setIsCanceling(true);
+    try {
+      const token = await getToken();
+      const route = RiderApiRoutes.CancelOrder(activeOrder.id);
+      const res = await fetch(route.path, {
+        method: route.method,
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ reason: cancelReason, details: cancelDetails })
+      });
+      if (!res.ok) {
+        if (res.status === 401) {
+          Toast.error("Session Expired", "Please log in again to continue.");
+          signOut();
+          router.replace("/(Auth)/sign-in/screen");
+          return;
+        }
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Failed to cancel delivery");
+      }
+      setShowCancelSheet(false);
+      Toast.success("Delivery Cancelled", "Your delivery assignment has been cancelled/rejected successfully.");
+      queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
+    } catch (e: unknown) {
+      Toast.error("Error", (e as Error).message || "Failed to cancel delivery");
+    } finally {
+      setIsCanceling(false);
+    }
+  };
+
   useEffect(() => {
     // Initial fetch handled directly by useRiderOrders hook via React Query
   }, []);
@@ -432,14 +494,78 @@ export default function ActiveDelivery() {
     mismatch_pending: "Dispute Paused: Waiting for Customer",
   };
 
-  const snapPoints = ["25%", "45%"];
+  const snapPoints = ["35%", "55%", "90%"];
   const bottomSheetRef = useRef<BottomSheet>(null);
+
+  const mapOverlays = useMemo(() => {
+    if (!Marker) return null;
+    const overlays = [];
+    
+    // OSRM Route Polyline
+    if (routeCoords.length > 0 && Polyline) {
+        overlays.push(
+            <Polyline 
+                key="route-polyline"
+                coordinates={routeCoords} 
+                strokeWidth={5} 
+                strokeColor={BRAND.primary} 
+            />
+        );
+    }
+    
+    // Rider live position
+    if (currentLocation) {
+        overlays.push(
+            <Marker
+                key="rider-position"
+                coordinate={{ latitude: currentLocation.latitude, longitude: currentLocation.longitude }}
+                title="You"
+                pinColor={BRAND.primary}
+            />
+        );
+    }
+    // Render all active orders on the map for search and visualization
+    activeOrdersList.forEach((order: any) => {
+        const isSelected = activeOrder?.id === order.id;
+        
+        // Pickup marker (vendor)
+        if (order.lat_from && order.lng_from) {
+            overlays.push(
+                <Marker
+                    key={`pickup-${order.id}`}
+                    coordinate={{ latitude: order.lat_from, longitude: order.lng_from }}
+                    title={`Pickup #${order.id.substring(0, 8)}`}
+                    description={order.vendor?.business_name || "Vendor"}
+                    pinColor={isSelected ? BRAND.primary : "gray"}
+                    onPress={() => setActiveOrder(order)}
+                />
+            );
+        }
+        
+        // Dropoff marker (customer)
+        if (order.lat && order.lng) {
+            overlays.push(
+                <Marker
+                    key={`dropoff-${order.id}`}
+                    coordinate={{ latitude: order.lat, longitude: order.lng }}
+                    title={`Dropoff #${order.id.substring(0, 8)}`}
+                    description="Customer"
+                    pinColor={isSelected ? TOAST.success : "orange"}
+                    onPress={() => setActiveOrder(order)}
+                />
+            );
+        }
+    });
+    
+    return overlays;
+  }, [routeCoords, currentLocation?.latitude, currentLocation?.longitude, activeOrder?.id, activeOrdersList]);
+
 
   return (
     <View className={`flex-1 ${darkTheme ? "bg-surface" : "bg-white"}`}>
       <StatusBar translucent backgroundColor={darkTheme ? "black" : "white"} barStyle={darkTheme ? "light-content" : "dark-content"} />
 
-      <SafeAreaView edges={["top"]} style={{ backgroundColor: darkTheme ? "#000" : "#fff" }}>
+      <SafeAreaView edges={["top"]} style={{ backgroundColor: darkTheme ? "#000" : "#fff", zIndex: 50 }}>
         <View style={{ overflow: "hidden", paddingBottom: 4 }}>
             <View 
                 className="flex-row items-center px-4 py-3 pb-4 mb-2"
@@ -460,72 +586,69 @@ export default function ActiveDelivery() {
         </View>
       </SafeAreaView>
 
-      {/* ── Live Map ── */}
+      {/* ── Live Map & Zoom Controls ── */}
       <View className={`flex-1 ${darkTheme ? "bg-surface-container" : "bg-white"}`}>
-        {MapView ? (
-          <MapView
-            ref={mapRef}
-            // 🟢 FREE OPEN SOURCE MVP MODE 
-            // Uncomment this block for MVP:
-            provider={undefined}
-            // 🔴 PRODUCTION GOOGLE MAPS MODE 
-            // Uncomment this block for Production:
-            // provider={PROVIDER_GOOGLE}
-            style={{ flex: 1 }}
-            customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
-            initialRegion={currentLocation ? {
-              latitude: currentLocation.latitude,
-              longitude: currentLocation.longitude,
-              latitudeDelta: 0.015,
-              longitudeDelta: 0.015,
-            } : {
-              latitude: -1.2921,
-              longitude: 36.8219,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-            showsUserLocation={true}
-            showsMyLocationButton={true}
-          >
-            {/* 🟢 FREE OPEN SOURCE MVP MODE */}
-            {/* Uncomment this block for MVP: */}
-            {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
+        {/* Search Bar Overlay */}
+        <View className="absolute top-4 left-4 right-4 z-10">
+            <View className={`flex-row items-center px-4 py-3 rounded-full border ${darkTheme ? "bg-black border-gray-800" : "bg-white border-gray-100"}`} style={darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+                <Ionicons name="search" size={20} color={darkTheme ? "#89929b" : "#94a3b8"} className="mr-2" />
+                <TextInput
+                    placeholder="Search active deliveries..."
+                    placeholderTextColor={darkTheme ? "#89929b" : "#94a3b8"}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    style={{ color: darkTheme ? "#fff" : "#0f172a", flex: 1, fontSize: 16 }}
+                />
+            </View>
+        </View>
 
-            {/* OSRM Route Polyline */}
-            {routeCoords.length > 0 && Polyline && (
-              <Polyline 
-                coordinates={routeCoords} 
-                strokeWidth={5} 
-                strokeColor={BRAND.primary} 
-              />
+        {MapView ? (
+          <View style={{ flex: 1 }}>
+            <MapView
+              ref={mapRef}
+              // 🟢 FREE OPEN SOURCE MVP MODE 
+              // Uncomment this block for MVP:
+              // provider={undefined}
+              // 🔴 PRODUCTION GOOGLE MAPS MODE 
+              // Uncomment this block for Production:
+              provider={PROVIDER_GOOGLE}
+              mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
+              style={{ flex: 1 }}
+              initialRegion={currentLocation ? {
+                latitude: currentLocation.latitude,
+                longitude: currentLocation.longitude,
+                latitudeDelta: 0.015,
+                longitudeDelta: 0.015,
+              } : {
+                latitude: -1.2921,
+                longitude: 36.8219,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }}
+              showsUserLocation={true}
+              showsMyLocationButton={true}
+            >
+              {mapOverlays}
+            </MapView>
+            
+            {/* Zoom Controls Overlay - Repositioned below 'My Location' button */}
+            {activeOrder && (
+              <View className="absolute top-44 right-4 pointer-events-auto flex-col gap-3">
+                <PressableScale
+                  onPress={() => handleZoom(true)}
+                  className={`w-10 h-10 rounded-full items-center justify-center border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
+                >
+                  <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>+</Text>
+                </PressableScale>
+                <PressableScale
+                  onPress={() => handleZoom(false)}
+                  className={`w-10 h-10 rounded-full items-center justify-center border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
+                >
+                  <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>−</Text>
+                </PressableScale>
+              </View>
             )}
-            {/* Rider live position */}
-            {currentLocation && (
-              <Marker
-                coordinate={{ latitude: currentLocation.latitude, longitude: currentLocation.longitude }}
-                title="You"
-                pinColor={BRAND.primary}
-              />
-            )}
-            {/* Pickup marker (vendor) */}
-            {activeOrder?.lat_from && activeOrder?.lng_from && (
-              <Marker
-                coordinate={{ latitude: activeOrder.lat_from, longitude: activeOrder.lng_from }}
-                title="Pickup"
-                description={activeOrder.vendor?.business_name || "Vendor"}
-                pinColor={BRAND.primary}
-              />
-            )}
-            {/* Dropoff marker (customer) */}
-            {activeOrder?.lat && activeOrder?.lng && (
-              <Marker
-                coordinate={{ latitude: activeOrder.lat, longitude: activeOrder.lng }}
-                title="Dropoff"
-                description="Customer"
-                pinColor={TOAST.success}
-              />
-            )}
-          </MapView>
+          </View>
         ) : (
           <View className="flex-1 items-center justify-center">
             <Ionicons name="map-outline" size={64} color={BRAND.primary} />
@@ -538,31 +661,16 @@ export default function ActiveDelivery() {
         )}
       </View>
 
-      <View className="absolute top-4 right-4 pointer-events-auto flex-row gap-2">
-        <PressableScale
-          onPress={() => handleZoom(true)}
-          className={`w-10 h-10 rounded-full items-center justify-center shadow-sm border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
-          style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
-        >
-          <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>+</Text>
-        </PressableScale>
-        <PressableScale
-          onPress={() => handleZoom(false)}
-          className={`w-10 h-10 rounded-full items-center justify-center shadow-sm border ${darkTheme ? "bg-surface-variant border-outline-variant" : "bg-white border-gray-200"}`}
-          style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}
-        >
-          <Text className={`text-xl font-bold ${darkTheme ? "text-on-surface" : "text-gray-800"}`}>−</Text>
-        </PressableScale>
-      </View>
-
       <BottomSheet
         ref={bottomSheetRef}
         snapPoints={snapPoints}
         enablePanDownToClose={false}
+        onChange={(index) => setSheetIndex(index)}
         backgroundStyle={{ backgroundColor: darkTheme ? BRAND.bgDark : BRAND.white }}
         handleIndicatorStyle={{ backgroundColor: darkTheme ? BRAND.gray800 : BRAND.gray200 }}
+        style={{ elevation: 10, zIndex: 10 }}
       >
-        <BottomSheetView className="flex-1 px-5 pt-2 pb-6">
+        <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 }}>
           {isLoading ? (
             <RiderActiveDeliverySkeleton />
           ) : activeOrder ? (
@@ -579,6 +687,12 @@ export default function ActiveDelivery() {
                     <Text className={`text-sm mt-1.5 ${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>
                       KSH {activeOrder.total_amount} · {activeOrder.order_item?.length || 0} item(s)
                     </Text>
+                    {activeOrder.payment_method === "cash" && (
+                      <View className="mt-2 flex-row items-center gap-1 bg-amber-500/10 px-2 py-1 rounded-md self-start border border-amber-500/20">
+                        <Ionicons name="cash" size={14} color="#f59e0b" />
+                        <Text className="text-xs font-bold text-amber-600">Collect Cash: KSH {activeOrder.total_amount}</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
 
@@ -732,7 +846,7 @@ export default function ActiveDelivery() {
                       )}
                     </View>
 
-                    <PressableScale onPress={captureProofAndDeliver} className="py-4 rounded-3xl items-center shadow-sm flex-row justify-center gap-2" style={{ backgroundColor: TOAST.success }}>
+                    <PressableScale onPress={captureProofAndDeliver} className="py-4 rounded-3xl items-center shadow-sm flex-row justify-center gap-2" style={{ backgroundColor: BRAND.primary }}>
                       <Ionicons name="camera-outline" size={24} color={BRAND.white} />
                       <Text className="text-white font-bold text-lg">Dropoff & Take Photo</Text>
                     </PressableScale>
@@ -762,8 +876,9 @@ export default function ActiveDelivery() {
 
                     {/* Quick Deliver */}
                     {(emptiesReceived >= computedEmptiesExpected) && (
-                      <PressableScale onPress={() => updateDeliveryStatus("delivered")} className="py-2 items-center">
-                        <Text className={`font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"} underline`}>Skip Photo, Mark Delivered</Text>
+                      <PressableScale onPress={() => updateDeliveryStatus("delivered")} className="py-4 mt-2 rounded-3xl items-center shadow-sm flex-row justify-center gap-2" style={{ backgroundColor: BRAND.primary }}>
+                        <Ionicons name="checkmark-circle-outline" size={24} color={BRAND.white} />
+                        <Text className="text-white font-bold text-lg">Skip Photo, Mark Delivered</Text>
                       </PressableScale>
                     )}
 
@@ -790,15 +905,16 @@ export default function ActiveDelivery() {
                       Waiting for the customer to come downstairs. Once you hand over the bottles on the ground floor, you can complete the delivery below.
                     </Text>
                     
-                    <PressableScale onPress={captureProofAndDeliver} className="py-4 px-6 rounded-3xl items-center shadow-sm flex-row justify-center gap-2 mb-3" style={{ backgroundColor: TOAST.success }}>
+                    <PressableScale onPress={captureProofAndDeliver} className="py-4 px-6 rounded-3xl items-center shadow-sm flex-row justify-center gap-2 mb-3" style={{ backgroundColor: BRAND.primary }}>
                       <Ionicons name="camera-outline" size={24} color={BRAND.white} />
                       <Text className="text-white font-bold text-lg">Dropoff & Take Photo</Text>
                     </PressableScale>
 
                     {/* Quick Deliver */}
                     {(emptiesReceived >= computedEmptiesExpected) && (
-                      <PressableScale onPress={() => updateDeliveryStatus("delivered")} className="py-3 items-center">
-                        <Text className={`font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"} underline`}>Skip Photo, Mark Delivered</Text>
+                      <PressableScale onPress={() => updateDeliveryStatus("delivered")} className="py-4 px-6 rounded-3xl items-center shadow-sm flex-row justify-center gap-2" style={{ backgroundColor: BRAND.primary }}>
+                        <Ionicons name="checkmark-circle-outline" size={24} color={BRAND.white} />
+                        <Text className="text-white font-bold text-lg">Skip Photo, Mark Delivered</Text>
                       </PressableScale>
                     )}
                   </View>
@@ -814,17 +930,32 @@ export default function ActiveDelivery() {
                     </Text>
                   </View>
                 )}
+
+                {/* Cancel / Report Issue Button */}
+                <View className="mt-4 pt-4 border-t" style={{ borderTopColor: darkTheme ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+                  <PressableScale 
+                    onPress={() => setShowCancelSheet(true)}
+                    className="py-3 rounded-xl items-center border flex-row justify-center gap-2"
+                    style={{ borderColor: TOAST.error + '33', backgroundColor: darkTheme ? TOAST.error + '1A' : TOAST.error + '0D' }}
+                  >
+                    <Ionicons name="alert-circle-outline" size={18} color={TOAST.error} />
+                    <Text style={{ color: TOAST.error }} className="font-bold text-sm">
+                      Report Issue / Cancel Delivery
+                    </Text>
+                  </PressableScale>
+                </View>
+
               </View>
             </>
           ) : (
-            <View className="flex-1 items-center justify-center -mt-8">
+            <View className="flex-1 items-center justify-center py-12 mt-4">
               <Ionicons name="cafe-outline" size={64} color={BRAND.primary} />
               <Text className={`text-lg mt-4 text-center ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
                 No active deliveries right now. You'll be notified when a new order is assigned.
               </Text>
             </View>
           )}
-        </BottomSheetView>
+        </BottomSheetScrollView>
       </BottomSheet>
 
       {/* Address Mismatch Bottom Sheet */}
@@ -872,6 +1003,81 @@ export default function ActiveDelivery() {
           </View>
         </View>
       </Modal>
+
+      {/* Cancel Delivery Bottom Sheet */}
+      <Modal visible={showCancelSheet} transparent animationType="slide">
+        <View className="flex-1 justify-end bg-black/60">
+          <View className={`rounded-t-3xl p-6 ${darkTheme ? 'bg-surface-container' : 'bg-white'}`}>
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className={`text-xl font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>Report Issue / Cancel</Text>
+              <PressableScale onPress={() => setShowCancelSheet(false)} className="w-8 h-8 rounded-full bg-gray-200/20 items-center justify-center">
+                <Text className={`text-lg font-bold ${darkTheme ? 'text-gray-400' : 'text-gray-500'}`}>✕</Text>
+              </PressableScale>
+            </View>
+            <Text className={`mb-4 ${darkTheme ? 'text-gray-300' : 'text-gray-600'}`}>
+              Why are you cancelling this delivery? Please note that frequent cancellations may affect your rating.
+            </Text>
+            
+            <View className="flex-col gap-2 mb-6">
+              {(activeOrder?.order_status === "picked_up" || activeOrder?.order_status === "in_transit") ? (
+                <>
+                  {["vehicle_issue", "accident", "customer_unreachable", "customer_refused", "other"].map((reason) => (
+                    <PressableScale
+                      key={reason}
+                      onPress={() => setCancelReason(reason)}
+                      className={`p-3 rounded-xl border flex-row items-center gap-2`}
+                      style={{
+                        backgroundColor: cancelReason === reason ? BRAND.primary + '1A' : (darkTheme ? BRAND.gray800 : BRAND.white),
+                        borderColor: cancelReason === reason ? BRAND.primary : (darkTheme ? BRAND.gray700 : BRAND.gray200)
+                      }}
+                    >
+                      <View className={`w-5 h-5 rounded-full border-2 items-center justify-center`} style={{ borderColor: cancelReason === reason ? BRAND.primary : BRAND.gray400 }}>
+                        {cancelReason === reason && <View className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BRAND.primary }} />}
+                      </View>
+                      <Text className={`font-semibold capitalize ${cancelReason === reason ? (darkTheme ? 'text-white' : 'text-gray-900') : (darkTheme ? 'text-gray-400' : 'text-gray-600')}`}>
+                        {reason.replace(/_/g, ' ')}
+                      </Text>
+                    </PressableScale>
+                  ))}
+                </>
+              ) : (
+                <>
+                  {["vehicle_issue", "accident", "vendor_closed", "out_of_stock", "other"].map((reason) => (
+                    <PressableScale
+                      key={reason}
+                      onPress={() => setCancelReason(reason)}
+                      className={`p-3 rounded-xl border flex-row items-center gap-2`}
+                      style={{
+                        backgroundColor: cancelReason === reason ? BRAND.primary + '1A' : (darkTheme ? BRAND.gray800 : BRAND.white),
+                        borderColor: cancelReason === reason ? BRAND.primary : (darkTheme ? BRAND.gray700 : BRAND.gray200)
+                      }}
+                    >
+                      <View className={`w-5 h-5 rounded-full border-2 items-center justify-center`} style={{ borderColor: cancelReason === reason ? BRAND.primary : BRAND.gray400 }}>
+                        {cancelReason === reason && <View className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: BRAND.primary }} />}
+                      </View>
+                      <Text className={`font-semibold capitalize ${cancelReason === reason ? (darkTheme ? 'text-white' : 'text-gray-900') : (darkTheme ? 'text-gray-400' : 'text-gray-600')}`}>
+                        {reason.replace(/_/g, ' ')}
+                      </Text>
+                    </PressableScale>
+                  ))}
+                </>
+              )}
+            </View>
+
+            <PressableScale 
+              onPress={cancelDelivery}
+              disabled={isCanceling}
+              className="py-4 rounded-xl items-center"
+              style={{ backgroundColor: TOAST.error }}
+            >
+              <Text className="text-white font-bold text-lg">
+                {isCanceling ? "Processing..." : "Confirm Cancellation"}
+              </Text>
+            </PressableScale>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }

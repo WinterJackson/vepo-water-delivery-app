@@ -23,7 +23,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.drop.rider",
       "config": {
-        "googleMapsApiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+        "googleMapsApiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
       "package": "com.drop.rider",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+          "apiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
         }
       },
       "permissions": [

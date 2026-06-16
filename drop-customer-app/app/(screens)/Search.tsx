@@ -15,6 +15,7 @@ import { FlashList } from "@shopify/flash-list";
 import { trackEvent } from "@/utils/analytics";
 import { useLocation } from "@/hooks/useLocation";
 import { Ionicons } from "@expo/vector-icons";
+import { useDebounce } from "@/hooks/useDebounce";
 
 const PRODUCT_CATEGORIES = [
 	{ id: 'all', label: 'All Products' },
@@ -42,6 +43,7 @@ export default function Search() {
 	
 	const [searchState, setSearchState] = useState(initialQuery);
 	const [search, setSearch] = useState(initialQuery);
+	const debouncedSearch = useDebounce(search, 500);
 	const [hasSearched, setHasSearched] = useState(!!initialQuery || hasCategoryParam);
 	const [productCategoryFilter, setProductCategoryFilter] = useState(initialCategory);
 	const [searchMode, setSearchMode] = useState<string | null>(initialMode);
@@ -89,29 +91,25 @@ export default function Search() {
 	}, [searchMode, productCategoryFilter]);
 
 	useEffect(() => {
-		const delayDebounceFn = setTimeout(() => {
-			if (search.trim().length > 1) {
-				setSearchState(search);
-				setHasSearched(true);
-				setShowHistory(false);
-				saveToHistory(search.trim());
-			} else {
-				setSearchState("");
-				// When in a mode-based search (Bento card), never reset the view
-				if (searchMode) {
-					// Keep hasSearched true and showHistory false — the mode drives the query
-					return;
-				}
-				// For standard text search: reset if no active category filter
-				if (productCategoryFilter === "all") {
-					setHasSearched(false);
-				}
-				if (search.trim() === "" && productCategoryFilter === "all") setShowHistory(true);
+		if (debouncedSearch.trim().length > 1) {
+			setSearchState(debouncedSearch);
+			setHasSearched(true);
+			setShowHistory(false);
+			saveToHistory(debouncedSearch.trim());
+		} else {
+			setSearchState("");
+			// When in a mode-based search (Bento card), never reset the view
+			if (searchMode) {
+				// Keep hasSearched true and showHistory false — the mode drives the query
+				return;
 			}
-		}, 500);
-
-		return () => clearTimeout(delayDebounceFn);
-	}, [search, productCategoryFilter, searchMode]);
+			// For standard text search: reset if no active category filter
+			if (productCategoryFilter === "all") {
+				setHasSearched(false);
+			}
+			if (debouncedSearch.trim() === "" && productCategoryFilter === "all") setShowHistory(true);
+		}
+	}, [debouncedSearch, productCategoryFilter, searchMode]);
 
 	const loadHistory = async () => {
 		try {

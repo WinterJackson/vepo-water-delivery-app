@@ -24,6 +24,13 @@ except ImportError:
     logger.warning("resend package not installed — emails will be logged only. Run: pip install resend")
 
 
+from tenacity import retry, stop_after_attempt, wait_exponential
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=4),
+    reraise=False
+)
 def _send(to: str, subject: str, html: str) -> None:
     """Internal helper: send via Resend or fall back to logging."""
     if _resend_available:
@@ -36,7 +43,8 @@ def _send(to: str, subject: str, html: str) -> None:
             })
             logger.info(f"Email sent to {to}: {subject}")
         except Exception as e:
-            logger.error(f"Resend email failed for {to}: {e}")
+            logger.error(f"Resend email failed for {to}: {e}", exc_info=True)
+            raise e  # trigger tenacity retry
     else:
         logger.info(f"[EMAIL STUB] To: {to} | Subject: {subject}")
 

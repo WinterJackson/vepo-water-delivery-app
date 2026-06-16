@@ -65,7 +65,7 @@ export interface Order {
   id: string;
   order_id: string;
   order_status: OrderStatus;
-  total_price: number;
+  total_amount: number;
   delivery_fee: number;
   service_fee: number;
   items: OrderItem[];

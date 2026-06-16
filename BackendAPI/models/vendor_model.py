@@ -19,6 +19,7 @@ class Vendor(Base):
   __table_args__ = (
       Index('idx_vendor_location_gist', 'location', postgresql_using='gist'),
       Index('idx_vendor_type_rating', 'vendor_type', 'rating'),
+      Index('idx_vendors_search_vector', 'search_vector', postgresql_using='gin'),
   )
   id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4, index=True)
   clerk_id = Column(String, nullable=True, index=True) # Removed unique constraint to allow multi-store
@@ -40,8 +41,10 @@ class Vendor(Base):
   verification_status = Column(String, default="pending")
   is_online = Column(Boolean, default=True, index=True)
   rating = Column(Float, nullable=True, index=True, default=0)
+  h3_index_res8 = Column(String(15), index=True, nullable=True)
   total_sales = Column(Integer, nullable=True, index=True)
   sales_amount = Column(Numeric(10, 2), nullable=True, index=True)
+  wallet_balance = Column(Numeric(10, 2), nullable=False, default=0.0)
   deposit_fee = Column(Numeric(10, 2), nullable=False, default=600.0)
   wholesale_base_delivery_fee = Column(Numeric(10, 2), nullable=True, default=0.0)
   wholesale_per_km_fee = Column(Numeric(10, 2), nullable=True, default=0.0)

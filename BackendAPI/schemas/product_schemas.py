@@ -45,6 +45,14 @@ class VendorSnippet(BaseModel):
   model_config = {"from_attributes": True}
 
 
+class OrderProductDetail(BaseProduct):
+  description: str | None
+  unit: str | None 
+  is_available: bool
+  
+  model_config = {"from_attributes": True}
+
+
 class ProductFull(BaseProduct):
   description: str | None
   unit: str | None 

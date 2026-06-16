@@ -9,9 +9,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-limiter = Limiter(key_func=get_remote_address)
+from core.redis_client import redis_limiter as limiter
 
 @router.post("/webhook")
 @limiter.limit("5/minute")

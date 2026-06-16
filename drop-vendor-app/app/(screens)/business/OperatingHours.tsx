@@ -5,6 +5,7 @@ import { View, Text, ScrollView, TextInput, ActivityIndicator, KeyboardAvoidingV
 import { Stack, useRouter } from "expo-router";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useDashboard } from "@/hooks/queries/useDashboard";
+import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
 import { useAuth } from "@clerk/clerk-expo";
 import { useQueryClient } from "@tanstack/react-query";
 import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
@@ -19,8 +20,16 @@ export default function OperatingHours() {
     const darkTheme = currentTheme === "dark";
     const router = useRouter();
     const { data: dashboard } = useDashboard();
+    const { data: vendorProfile } = useVendorProfile();
     const queryClient = useQueryClient();
     const { getToken } = useAuth();
+
+    React.useEffect(() => {
+        if (vendorProfile?.role === "staff") {
+            Toast.error("Access Denied", "Staff members cannot modify operating hours.");
+            router.replace("/(screens)");
+        }
+    }, [vendorProfile]);
 
     const to12Hour = (time24: string) => {
         if (!time24) return "";
@@ -150,7 +159,7 @@ export default function OperatingHours() {
                         <PressableScale onPress={() => router.back()} className="mr-4">
                             <BackButtonMinimal />
                         </PressableScale>
-                        <Text className={`text-2xl font-bold ${darkTheme ? "text-white" : "text-black"}`}>
+                        <Text className={`text-xl font-bold flex-1 ${darkTheme ? "text-white" : "text-slate-900"}`}>
                             Operating Hours
                         </Text>
                     </View>

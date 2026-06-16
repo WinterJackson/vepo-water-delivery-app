@@ -6,7 +6,7 @@ import RiderApiRoutes from '../../API/routes/RiderApiRoutes';
 export interface RiderOrder {
     id: string;
     order_status: string;
-    total_price: number;
+    total_amount?: number;
     delivery_address: string;
     customer?: { full_name: string; phone_number: string };
     vendor?: { business_name: string; location_address: string; lat?: number; lng?: number };
@@ -57,6 +57,7 @@ export interface RiderProfile {
     preferences?: any;
     employer_vendor_id?: string;
     kyc_status?: string;
+    wallet_balance?: number;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

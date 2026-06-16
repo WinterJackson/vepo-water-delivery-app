@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.dependencies import get_db
-from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_customer
 from schemas.saved_location_schemas import SavedLocationCreate, SavedLocationUpdate, SavedLocationOut
 from services.saved_location_service import (
     list_saved_locations,
@@ -18,7 +18,7 @@ router = APIRouter()
 @router.get("/saved-locations", response_model=list[SavedLocationOut])
 async def get_locations(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """List all saved locations for the authenticated user, ordered by default → recency."""
     clerk_id = user["sub"]
@@ -29,7 +29,7 @@ async def get_locations(
 async def add_location(
     body: SavedLocationCreate,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Create a new saved location (max 10 per user)."""
     clerk_id = user["sub"]
@@ -41,7 +41,7 @@ async def edit_location(
     location_id: UUID,
     body: SavedLocationUpdate,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Update an existing saved location."""
     clerk_id = user["sub"]
@@ -52,7 +52,7 @@ async def edit_location(
 async def remove_location(
     location_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Delete a saved location."""
     clerk_id = user["sub"]
@@ -63,7 +63,7 @@ async def remove_location(
 async def select_location(
     location_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_customer),
 ):
     """Select a saved location as the active delivery address.
     Updates use_count, last_used_at, and syncs to User.lat/lng/location_address."""

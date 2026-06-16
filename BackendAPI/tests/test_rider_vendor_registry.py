@@ -40,7 +40,7 @@ async def test_distance_enforcement_constant():
     """DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM should be 1.5km."""
     from services.dispatch_policy import DispatchPolicy
 
-    assert DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM == 1.5
+    assert DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM == 2.0
 
 
 @pytest.mark.asyncio

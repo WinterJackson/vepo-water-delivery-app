@@ -10,8 +10,9 @@ from .review_model import Review
 from .payout_model import Payout
 from .payment_model import Payment
 from .notification_model import Notification
-from .vendor_remittance_model import VendorRemittance
 from .vendor_rider_model import VendorRiderRegistry
 from .saved_location_model import SavedLocation
+from .wallet_transaction_model import WalletTransaction
+from .order_tracking_log_model import OrderTrackingLog
 
-__all__ = ["Cart", "Vendor", "User", "CartItem", "Product", "Order", "OrderItem", "Deliverer", "Favorite", "VendorFavorite", "Review", "Payout", "Payment", "Notification", "VendorRemittance", "VendorRiderRegistry", "SavedLocation"]
+__all__ = ["Cart", "Vendor", "User", "CartItem", "Product", "Order", "OrderItem", "Deliverer", "Favorite", "VendorFavorite", "Review", "Payout", "Payment", "Notification", "VendorRiderRegistry", "SavedLocation", "WalletTransaction", "OrderTrackingLog"]

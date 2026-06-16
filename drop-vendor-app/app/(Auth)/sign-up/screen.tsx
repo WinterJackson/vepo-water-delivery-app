@@ -2,8 +2,9 @@ import InputField from "@/components/ui/InputField";
 import images from "@/constants/images/images";
 
 // @ts-ignore
-import { isClerkAPIResponseError, useSSO, useSignUp } from "@clerk/clerk-expo";
+import { isClerkAPIResponseError, useSSO, useSignUp, useAuth } from "@clerk/clerk-expo";
 import { LinearGradient } from "expo-linear-gradient";
+import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
@@ -36,6 +37,7 @@ export default function SignUp() {
 	const router = useRouter();
 	const { isLoaded, signUp, setActive } = useSignUp();
 	const { startSSOFlow } = useSSO();
+	const { signOut } = useAuth();
 	const { currentTheme } = useContext(UIThemeContext);
 	const darkTheme = currentTheme === "dark";
 
@@ -158,12 +160,8 @@ export default function SignUp() {
 				await startSSOFlow({
 					strategy: "oauth_google",
 					// For web, defaults to current path
-					// For native, you must pass a scheme, like AuthSession.makeRedirectUri({ scheme, path })
-					// For more info, see https://docs.expo.dev/versions/latest/sdk/auth-session/#authsessionmakeredirecturioptions
-					redirectUrl: AuthSession.makeRedirectUri({
-						scheme: "drop-vendor",
-						path: "(Auth)/sign-up/screen",
-					}),
+					// For native, you must pass a scheme
+					redirectUrl: Linking.createURL('/(Auth)/sign-up/screen', { scheme: 'drop-vendor' }),
 				});
 
 			// If sign in was successful, set the active session
@@ -174,7 +172,15 @@ export default function SignUp() {
 				if (__DEV__) console.warn("OAuth: No session created, MFA or additional steps may be required.");
 				success = false
 			}
-		} catch (err) {
+		} catch (err: any) {
+			// Handle stale cache "signed out" error from Clerk
+			if (err?.errors?.[0]?.code === "signed_out" || err?.errors?.[0]?.message === "Signed out" || (err as Error)?.message?.includes("You are signed out")) {
+				if (__DEV__) console.log("OAuth: Stale session detected. Clearing Clerk cache...");
+				await signOut();
+				success = false;
+				return;
+			}
+			
 			if (__DEV__) console.error("OAuth sign-up error:", err);
 			success = false
 		} finally {
@@ -182,7 +188,7 @@ export default function SignUp() {
 				setOAuthLoading(false);
 			}
 		}
-	}, []);
+	}, [startSSOFlow, signOut]);
 
 	return (
 		<>

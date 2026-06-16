@@ -330,14 +330,14 @@ export function BottleWalletSkeleton() {
 
             {/* Metric Cards */}
             <View className="flex-row gap-3">
-                <View className="flex-1 p-5 rounded-2xl" style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
+                <View className="flex-1 p-5 rounded-3xl" style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
                     <Skeleton width={32} height={32} borderRadius={16} />
                     <View className="mt-3">
                         <SkeletonText width={80} />
                         <SkeletonText width={100} />
                     </View>
                 </View>
-                <View className="flex-1 p-5 rounded-2xl" style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
+                <View className="flex-1 p-5 rounded-3xl" style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
                     <Skeleton width={32} height={32} borderRadius={16} />
                     <View className="mt-3">
                         <SkeletonText width={80} />

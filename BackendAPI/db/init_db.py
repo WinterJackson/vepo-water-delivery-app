@@ -10,6 +10,7 @@ from models.order_model import Order, OrderItem
 from models.product_model import Product
 from models.user_model import User
 from models.vendor_model import Vendor
+from models.failed_webhook_model import FailedWebhook
 
 
 async def reset_database():

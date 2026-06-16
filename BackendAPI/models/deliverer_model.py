@@ -6,7 +6,9 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from enum import Enum as PyEnum
 from sqlalchemy.orm import relationship
 from geoalchemy2 import Geography
-
+from sqlalchemy_utils import StringEncryptedType
+from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
+from utils.encryption import DB_ENCRYPTION_KEY
 class RiderVehicleType(str, PyEnum):
     motorbike = "motorbike"
     tuktuk = "tuktuk"
@@ -34,7 +36,7 @@ class Deliverer(Base):
   phone_number = Column(String, index=True, nullable=True)  #will revisit 
   profile_pic = Column(Text, nullable=True)
   driver_license = Column(Text, nullable=True)
-  ID_number = Column(String, nullable=False, index=True)
+  ID_number = Column(StringEncryptedType(String, DB_ENCRYPTION_KEY, AesEngine, 'pkcs5'), nullable=False)
   vehicle_type = Column(Enum(RiderVehicleType, name="rider_vehicle_type", create_type=False), nullable=False, default=RiderVehicleType.motorbike, index=True)
   employment_model = Column(Enum(RiderEmploymentType, name="rider_employment_type", create_type=False), nullable=False, default=RiderEmploymentType.gig_economy, index=True)
   employer_vendor_id = Column(UUID(as_uuid=True), ForeignKey("Vendors.id", ondelete="SET NULL"), nullable=True, index=True)
@@ -60,6 +62,7 @@ class Deliverer(Base):
   is_platinum = Column(Boolean, default=False, index=True)  # Gamification tier (drops commission to 7%)
   rating = Column(Float, default=5.0, index=True)
   acceptance_rate = Column(Float, default=100.0)
+  wallet_balance = Column(Float, default=0.0, nullable=False, index=True)
   shift_start = Column(Time, default=time(7,0), nullable=False, index=True)
   shift_end = Column(Time, default=time(19,0), nullable=False, index=True)
   push_token = Column(String(255), nullable=True)

@@ -49,17 +49,21 @@ export default function ScreensLayout() {
         <Stack.Screen name="Orders" />
         <Stack.Screen name="Profile" />
         
-        <Stack.Screen name="VendorRemittanceDashboard" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="WalletScreen" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Transactions" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="BottleReconciliation" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="MyMap" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="AddProduct" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="Notifications" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="Cashout" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="SettingsMain" options={{ animation: 'slide_from_right' }} />
+
         <Stack.Screen name="OwnerProfile" options={{ animation: 'slide_from_right' }} />
-        <Stack.Screen name="business/StoreProfile" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="business/OperatingHours" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="business/PayoutSettings" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="business/ManageStaff" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="OrderDetail/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="EditProduct/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="Map/[id]" options={{ animation: 'slide_from_right' }} />
+        <Stack.Screen name="StoreProfile" options={{ animation: 'slide_from_right' }} />
         <Stack.Screen name="RiderManagement" options={{ animation: 'slide_from_right' }} />
       </Stack>
       <View 

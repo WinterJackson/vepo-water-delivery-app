@@ -1,4 +1,5 @@
 import logging
+import h3
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -121,6 +122,7 @@ async def update_vendor_profile(session: AsyncSession, clerk_id: str, data: dict
         vendor.lat = data["lat"]
         vendor.lng = data["lng"]
         vendor.location = from_shape(Point(data["lng"], data["lat"]), srid=4326)
+        vendor.h3_index_res8 = str(h3.latlng_to_cell(data["lat"], data["lng"], 8))
 
     await session.commit()
     await session.refresh(vendor)
@@ -258,18 +260,25 @@ async def get_vendor_products(
     from sqlalchemy import and_, or_
     conditions = [Product.vendor_id == vendor.id]
     
-    if search_query:
-        conditions.append(Product.name.ilike(f"%{search_query}%"))
+    order_by_clauses = []
+    
+    if search_query and search_query.strip():
+        ts_query = func.websearch_to_tsquery('english', search_query)
+        conditions.append(Product.search_vector.op('@@')(ts_query))
+        order_by_clauses.append(func.ts_rank(Product.search_vector, ts_query).desc())
         
     if stock_filter == "Low Stock":
         conditions.append(and_(Product.stock > 0, Product.stock <= 5))
     elif stock_filter == "Out of Stock":
         conditions.append(Product.stock == 0)
 
+    # Always order alphabetically by name as secondary/fallback ordering
+    order_by_clauses.append(Product.name.asc())
+
     query = (
         select(Product)
         .where(and_(*conditions))
-        .order_by(Product.name.asc())
+        .order_by(*order_by_clauses)
         .offset(offset)
         .limit(limit)
     )
@@ -298,6 +307,16 @@ async def update_order_status(session: AsyncSession, clerk_id: str, order_id: UU
             status_code=400,
             detail=f"Invalid transition from '{order.order_status}' to '{new_status}'."
         )
+
+    # --- Wholesale Vendor Cash Float Check ---
+    if new_status == "accepted" and order.payment_method == "cash":
+        required_float = float(order.platform_total or 0)
+        current_balance = float(vendor.wallet_balance or 0)
+        if current_balance < required_float:
+            raise HTTPException(
+                status_code=402,
+                detail=f"Insufficient Wallet Balance to cover Platform Commission. Please top up KSH {required_float:,.2f} to accept this Cash order."
+            )
 
     order.order_status = new_status
 
@@ -355,11 +374,17 @@ async def get_vendor_dashboard(session: AsyncSession, clerk_id: str):
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    total_orders_q = select(func.count(Order.id)).where(Order.vendor_id == vendor.id)
+    total_orders_q = select(func.count(Order.id)).where(
+        and_(Order.vendor_id == vendor.id, Order.order_status != "cancelled")
+    )
     total_revenue_q = select(func.sum(
         func.coalesce(Order.vendor_net, Order.total_amount)
     )).where(
-        and_(Order.vendor_id == vendor.id, Order.payment_status == "paid")
+        and_(
+            Order.vendor_id == vendor.id, 
+            Order.payment_status == "paid",
+            Order.order_status != "cancelled"
+        )
     )
     pending_orders_q = select(func.count(Order.id)).where(
         and_(Order.vendor_id == vendor.id, Order.order_status == "pending")
@@ -385,6 +410,7 @@ async def get_vendor_dashboard(session: AsyncSession, clerk_id: str):
         and_(
             Order.vendor_id == vendor.id,
             Order.payment_status == "paid",
+            Order.order_status != "cancelled",
             Order.created_at >= start_of_week
         )
     )
@@ -465,44 +491,51 @@ async def assign_order_rider(session: AsyncSession, clerk_id: str, order_id: UUI
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
 
-    order = await session.get(Order, order_id)
-    if not order or order.vendor_id != vendor.id:
-        raise HTTPException(status_code=404, detail="Order not found")
+    from core.redis_client import redis_lock
+    lock_key = f"order_accept_lock:{order_id}"
+    
+    async with redis_lock(lock_key, timeout_seconds=10) as acquired:
+        if not acquired:
+            raise HTTPException(status_code=409, detail="This order is currently being modified by another process. Please try again.")
 
-    if order.order_status not in ["pending", "accepted", "unassigned", "preparing"]:
-        raise HTTPException(status_code=400, detail="Order cannot be assigned at this stage.")
+        order = await session.get(Order, order_id)
+        if not order or order.vendor_id != vendor.id:
+            raise HTTPException(status_code=404, detail="Order not found")
 
-    try:
-        rider_uuid = UUID(rider_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid rider ID")
+        if order.order_status not in ["pending", "accepted", "unassigned", "preparing"]:
+            raise HTTPException(status_code=400, detail="Order cannot be assigned at this stage.")
 
-    rider = await session.get(Deliverer, rider_uuid)
-    if not rider:
-        raise HTTPException(status_code=404, detail="Rider not found")
+        try:
+            rider_uuid = UUID(rider_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid rider ID")
 
-    # BUG-ORD-02 FIX: Verify rider is approved for this vendor before assignment
-    from models.vendor_rider_model import VendorRiderRegistry
-    from sqlalchemy import and_
-    registry_q = select(VendorRiderRegistry).where(
-        and_(
-            VendorRiderRegistry.rider_id == rider.id,
-            VendorRiderRegistry.vendor_id == vendor.id,
-            VendorRiderRegistry.status == "approved"
+        rider = await session.get(Deliverer, rider_uuid)
+        if not rider:
+            raise HTTPException(status_code=404, detail="Rider not found")
+
+        # BUG-ORD-02 FIX: Verify rider is approved for this vendor before assignment
+        from models.vendor_rider_model import VendorRiderRegistry
+        from sqlalchemy import and_
+        registry_q = select(VendorRiderRegistry).where(
+            and_(
+                VendorRiderRegistry.rider_id == rider.id,
+                VendorRiderRegistry.vendor_id == vendor.id,
+                VendorRiderRegistry.status == "approved"
+            )
         )
-    )
-    registry_result = await session.execute(registry_q)
-    if not registry_result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=400,
-            detail="This rider is not approved for your vendor. Approve them first via Rider Management."
-        )
+        registry_result = await session.execute(registry_q)
+        if not registry_result.scalar_one_or_none():
+            raise HTTPException(
+                status_code=400,
+                detail="This rider is not approved for your vendor. Approve them first via Rider Management."
+            )
 
-    # Proceed to assign rider to order
-    order.deliverer_id = rider.id
-    order.order_status = "accepted" if order.order_status == "pending" else order.order_status
+        # Proceed to assign rider to order
+        order.deliverer_id = rider.id
+        order.order_status = "accepted" if order.order_status == "pending" else order.order_status
 
-    await session.commit()
+        await session.commit()
 
     # Broadcast real-time order status update via WebSocket
     try:
@@ -553,4 +586,67 @@ async def assign_order_rider(session: AsyncSession, clerk_id: str, order_id: UUI
             data={"url": action_url}
         ))
 
+    # Notify Customer
+    customer = await session.get(User, order.customer_id)
+    if customer:
+        title = "Rider Assigned 🛵"
+        body = f"{rider.full_name} is on the way to pick up your order!"
+        action_url = f"/(screens)/OrderDetail/{order.id}"
+        await create_notification(
+            session=session,
+            user_id=customer.id,
+            user_type="customer",
+            title=title,
+            message=body,
+            message_type="order_assigned",
+            action_url=action_url,
+            related_order_id=order.id
+        )
+        if customer.push_token:
+            asyncio.create_task(send_push_message(
+                to=customer.push_token,
+                title=title,
+                body=body,
+                data={"url": action_url}
+            ))
+
     return {"message": "Rider assigned successfully", "order_id": str(order.id)}
+
+
+async def receive_bottles_from_rider(session: AsyncSession, clerk_id: str, rider_id: str, received_10L: int, received_20L: int):
+    """
+    Clears empty bottle debt when a gig-rider physically hands bottles back to the retail vendor.
+    """
+    vendor = await get_vendor_by_clerk_id(session, clerk_id)
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    from models.vendor_rider_model import VendorRiderRegistry
+    registry_q = select(VendorRiderRegistry).where(
+        and_(
+            VendorRiderRegistry.rider_id == rider_id,
+            VendorRiderRegistry.vendor_id == vendor.id
+        )
+    )
+    result = await session.execute(registry_q)
+    registry = result.scalar_one_or_none()
+    
+    if not registry:
+        raise HTTPException(status_code=404, detail="Rider is not registered with this vendor.")
+
+    # Decrement pending empties (ensure they don't go below zero)
+    if received_10L > 0:
+        current_10L = registry.pending_10L_empties or 0
+        registry.pending_10L_empties = max(0, current_10L - received_10L)
+        
+    if received_20L > 0:
+        current_20L = registry.pending_20L_empties or 0
+        registry.pending_20L_empties = max(0, current_20L - received_20L)
+
+    await session.commit()
+    
+    return {
+        "message": "Bottles received and rider debt cleared successfully.",
+        "pending_10L_empties": registry.pending_10L_empties,
+        "pending_20L_empties": registry.pending_20L_empties
+    }

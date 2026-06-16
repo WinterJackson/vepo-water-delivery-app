@@ -12,6 +12,8 @@ export interface Order {
     delivery_fee?: number;
     vehicle_class?: string;
     created_at: string;
+    payment_method: string;
+    is_locked: boolean;
     is_rated?: boolean;
     vendor?: { id: string; business_name: string; location_address: string; profile_pic?: string; phone_number?: string; vendor_type?: string };
     deliverer?: { id: string; full_name: string; phone_number?: string };
@@ -106,5 +108,41 @@ export function useLastCompletedOrder() {
             return data;
         },
         staleTime: 60000,
+    });
+}
+
+export function useActiveOrder() {
+    const { getToken } = useAuth();
+    return useQuery<Order | null, Error>({
+        queryKey: ['customer', 'orders', 'active'],
+        queryFn: async () => {
+            const token = await getToken();
+            const res = await fetch(`${BASE_URL}/api/cart/orders/active`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error(`Active order fetch failed: ${res.status}`);
+            const data = await res.json();
+            return data;
+        },
+        staleTime: 60000,
+    });
+}
+
+export function useOrderTrackingLogs(orderId: string | null) {
+    const { getToken } = useAuth();
+    return useQuery<any[], Error>({
+        queryKey: ['customer', 'orders', orderId, 'tracking'],
+        queryFn: async () => {
+            if (!orderId) return [];
+            const token = await getToken();
+            const res = await fetch(`${BASE_URL}/api/cart/orders/${orderId}/tracking-logs`, {
+                method: "GET",
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error(`Tracking logs fetch failed: ${res.status}`);
+            return res.json();
+        },
+        enabled: !!orderId,
     });
 }

@@ -1,0 +1,251 @@
+import React, { useContext, useState } from "react";
+import { View, Text, ScrollView, RefreshControl, Image, TextInput, Alert, Modal } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { UIThemeContext } from "@/context/ThemeContext";
+import { BRAND } from "@/constants/brandColors";
+import { PressableScale } from "@/components/ui/PressableScale";
+import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { useAuth } from "@clerk/clerk-expo";
+import * as Haptics from "expo-haptics";
+import { useVendorRiders } from "@/hooks/queries/useVendorRiders";
+import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
+import Toast from "react-native-toast-message";
+
+export default function BottleReconciliation() {
+  const router = useRouter();
+  const { currentTheme } = useContext(UIThemeContext);
+  const darkTheme = currentTheme === "dark";
+  const { getToken } = useAuth();
+  
+  const { data: riders = [], isLoading, refetch, isRefetching } = useVendorRiders();
+
+  const [selectedRider, setSelectedRider] = useState<any>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [input10L, setInput10L] = useState("");
+  const [input20L, setInput20L] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Only show riders who actually owe bottles
+  const ridersWithDebt = riders.filter((r: any) => 
+    (r.pending_10L_empties > 0 || r.pending_20L_empties > 0) && r.status === "approved"
+  );
+
+  const openReceiveModal = (rider: any) => {
+    setSelectedRider(rider);
+    setInput10L("");
+    setInput20L("");
+    setModalVisible(true);
+  };
+
+  const handleReceiveBottles = async () => {
+    const recv10 = parseInt(input10L) || 0;
+    const recv20 = parseInt(input20L) || 0;
+
+    if (recv10 === 0 && recv20 === 0) {
+      Alert.alert("Invalid Amount", "Please enter at least one bottle received.");
+      return;
+    }
+
+    if (recv10 > (selectedRider?.pending_10L_empties || 0)) {
+      Alert.alert("Excess Amount", `You cannot receive more 10L bottles than owed (${selectedRider?.pending_10L_empties}).`);
+      return;
+    }
+
+    if (recv20 > (selectedRider?.pending_20L_empties || 0)) {
+      Alert.alert("Excess Amount", `You cannot receive more 20L bottles than owed (${selectedRider?.pending_20L_empties}).`);
+      return;
+    }
+
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setIsSubmitting(true);
+      const token = await getToken();
+      const response = await fetch(VendorApiRoutes.ReceiveBottles.path, {
+        method: VendorApiRoutes.ReceiveBottles.method,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rider_id: selectedRider.deliverer_id,
+          received_10L: recv10,
+          received_20L: recv20
+        })
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (response.ok && !data?.error) {
+        Toast.show({ type: 'success', text1: 'Success', text2: 'Rider debt cleared successfully.' });
+        setModalVisible(false);
+        refetch();
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: data?.error || data?.detail || "Failed to clear debt." });
+      }
+    } catch (err) {
+      console.error(err);
+      Toast.show({ type: 'error', text1: 'Error', text2: "Could not process request at this time." });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  return (
+    <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
+      {/* Header */}
+      <View style={{ overflow: "hidden", paddingBottom: 4 }}>
+        <View 
+          className="flex-row items-center px-4 py-3 pb-4 mb-2"
+          style={{ 
+            backgroundColor: darkTheme ? "#000" : "#fff",
+            borderBottomWidth: 1, 
+            borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
+            ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
+          }}
+        >
+          <PressableScale onPress={() => router.back()} className="mr-4">
+            <BackButtonMinimal />
+          </PressableScale>
+          <Text className={`text-xl font-bold flex-1 ${darkTheme ? "text-white" : "text-slate-900"}`}>Bottle Reconciliation</Text>
+        </View>
+      </View>
+
+      <ScrollView 
+        className="flex-1 px-6 pt-2"
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={BRAND.primary} />}
+      >
+        <Text className={`text-sm mb-6 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
+          Manage physical inventory (empties) owed by your assigned gig-riders. When they return empties from Quick Swap orders, log them here to clear their debt.
+        </Text>
+
+        {isLoading && !riders.length ? (
+          <View>
+             <Skeleton width="100%" height={200} borderRadius={24} style={{ marginBottom: 16 }} />
+             <Skeleton width="100%" height={200} borderRadius={24} />
+          </View>
+        ) : ridersWithDebt.length === 0 ? (
+          <View className="items-center justify-center py-12">
+            <View className={`w-20 h-20 rounded-full items-center justify-center mb-4 ${darkTheme ? "bg-slate-800" : "bg-white border border-slate-100 shadow-sm"}`}>
+              <Ionicons name="checkmark-circle-outline" size={40} color={BRAND.primary} />
+            </View>
+            <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>All Clear!</Text>
+            <Text className={`text-center mt-2 px-6 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>No riders currently owe you any empty bottles.</Text>
+          </View>
+        ) : (
+          ridersWithDebt.map((rider: any) => (
+            <View 
+              key={rider.deliverer_id} 
+              className={`p-5 rounded-3xl mb-4 border ${darkTheme ? "bg-surface-container border-transparent" : "bg-white border-gray-100"}`}
+              style={darkTheme ? {} : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }}
+            >
+              <View className="flex-row items-center justify-between mb-4">
+                <View className="flex-row items-center">
+                  <View className="w-12 h-12 rounded-full overflow-hidden mr-3 bg-slate-200">
+                    {rider.profile_pic ? (
+                      <Image source={{ uri: rider.profile_pic }} className="w-full h-full" />
+                    ) : (
+                      <View className="w-full h-full items-center justify-center bg-slate-300">
+                        <Ionicons name="person" size={24} color="#64748b" />
+                      </View>
+                    )}
+                  </View>
+                  <View>
+                    <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-slate-900"}`}>{rider.name || "Gig Rider"}</Text>
+                    <Text className={`text-xs ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>{rider.phone_number}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View className={`flex-row rounded-2xl p-3 mb-4 ${darkTheme ? "bg-black/30" : "bg-slate-50"}`}>
+                <View className="flex-1 items-center border-r border-slate-200 dark:border-slate-700">
+                  <Text className={`text-xs font-medium mb-1 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>10L Empties Owed</Text>
+                  <Text className={`text-xl font-bold ${rider.pending_10L_empties > 0 ? "text-orange-500" : darkTheme ? "text-white" : "text-slate-900"}`}>
+                    {rider.pending_10L_empties || 0}
+                  </Text>
+                </View>
+                <View className="flex-1 items-center">
+                  <Text className={`text-xs font-medium mb-1 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>20L Empties Owed</Text>
+                  <Text className={`text-xl font-bold ${rider.pending_20L_empties > 0 ? "text-orange-500" : darkTheme ? "text-white" : "text-slate-900"}`}>
+                    {rider.pending_20L_empties || 0}
+                  </Text>
+                </View>
+              </View>
+
+              <PressableScale 
+                onPress={() => openReceiveModal(rider)}
+                className="w-full h-[45px] justify-center items-center rounded-xl bg-slate-900 dark:bg-white"
+              >
+                <Text className="text-white dark:text-slate-900 font-bold">Receive Empties</Text>
+              </PressableScale>
+            </View>
+          ))
+        )}
+        <View className="h-10" />
+      </ScrollView>
+
+      {/* Receive Modal */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View className="flex-1 justify-end bg-black/50">
+          <View className={`p-6 rounded-t-3xl ${darkTheme ? "bg-surface-container" : "bg-white"}`}>
+            <View className="flex-row justify-between items-center mb-6">
+              <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Receive Empties</Text>
+              <PressableScale onPress={() => setModalVisible(false)} className={`w-8 h-8 rounded-full items-center justify-center ${darkTheme ? "bg-black/50" : "bg-slate-100"}`}>
+                <Ionicons name="close" size={20} color={darkTheme ? "#fff" : "#0f172a"} />
+              </PressableScale>
+            </View>
+
+            <Text className={`text-sm mb-4 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
+              Enter the number of empties physically returned by <Text className="font-bold text-slate-900 dark:text-white">{selectedRider?.name}</Text>.
+            </Text>
+
+            <View className="flex-row justify-between mb-6">
+              <View className="flex-1 mr-2">
+                <Text className={`text-xs font-bold mb-2 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>10L BOTTLES</Text>
+                <TextInput
+                  value={input10L}
+                  onChangeText={setInput10L}
+                  keyboardType="numeric"
+                  placeholder={`Max: ${selectedRider?.pending_10L_empties || 0}`}
+                  placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"}
+                  className={`p-4 rounded-xl border font-bold text-lg text-center ${darkTheme ? "bg-black/30 border-transparent text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
+                />
+              </View>
+              <View className="flex-1 ml-2">
+                <Text className={`text-xs font-bold mb-2 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>20L BOTTLES</Text>
+                <TextInput
+                  value={input20L}
+                  onChangeText={setInput20L}
+                  keyboardType="numeric"
+                  placeholder={`Max: ${selectedRider?.pending_20L_empties || 0}`}
+                  placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"}
+                  className={`p-4 rounded-xl border font-bold text-lg text-center ${darkTheme ? "bg-black/30 border-transparent text-white" : "bg-slate-50 border-slate-200 text-slate-900"}`}
+                />
+              </View>
+            </View>
+
+            <PressableScale 
+              onPress={handleReceiveBottles}
+              disabled={isSubmitting}
+              className="w-full h-[55px] justify-center items-center rounded-xl"
+              style={{ backgroundColor: isSubmitting ? BRAND.gray400 : BRAND.primary }}
+            >
+              {isSubmitting ? (
+                <Skeleton width={80} height={20} borderRadius={4} style={{ alignSelf: 'center' }} />
+              ) : (
+                <Text className="text-white font-bold text-lg">Confirm Receipt</Text>
+              )}
+            </PressableScale>
+            <SafeAreaView />
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}

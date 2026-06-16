@@ -97,6 +97,7 @@ async def update_deliverer_profile(session: AsyncSession, clerk_id: str, data: d
             
         deliverer.operation_lat = data["operation_lat"]
         deliverer.operation_lng = data["operation_lng"]
+        deliverer.h3_index_res8 = str(h3.latlng_to_cell(data["operation_lat"], data["operation_lng"], 8))
         deliverer.zone_changes_this_month += 1
         deliverer.last_zone_change = now
 
@@ -229,14 +230,59 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
     if new_status == "delivered":
         deliverer.is_available = True # F-030: Free the rider for the next order
         
-        # For quick_swap: track empties received for operational insight
+        # --- Cash Order Float Deduction ---
+        if order.payment_method == "cash":
+            order.payment_status = "paid"
+            vendor = await session.get(Vendor, order.vendor_id)
+            if vendor:
+                if vendor.vendor_type and vendor.vendor_type.value == "wholesale_b2b":
+                    # For wholesale, the vendor's in-house rider collected the cash.
+                    # The platform only deducts the platform_total from the vendor's wallet.
+                    vendor.wallet_balance = float(vendor.wallet_balance or 0) - float(order.platform_total or 0)
+                else:
+                    # For retail, the gig-rider collected the cash.
+                    # Deduct full vendor_net + platform_total from rider, and credit vendor_net to vendor.
+                    amount_to_deduct = float(order.vendor_net or 0) + float(order.platform_total or 0)
+                    deliverer.wallet_balance = float(deliverer.wallet_balance or 0) - amount_to_deduct
+                    vendor.wallet_balance = float(vendor.wallet_balance or 0) + float(order.vendor_net or 0)
+        elif order.payment_method == "mpesa" and order.payment_status == "paid":
+            # --- M-Pesa Order Crediting ---
+            vendor = await session.get(Vendor, order.vendor_id)
+            if vendor:
+                vendor.wallet_balance = float(vendor.wallet_balance or 0) + float(order.vendor_net or 0)
+            # Rider only gets commission if they are a gig worker (retail)
+            if not (vendor and vendor.vendor_type and vendor.vendor_type.value == "wholesale_b2b"):
+                deliverer.wallet_balance = float(deliverer.wallet_balance or 0) + float(order.rider_net or 0)
+
+        # --- Bottle Inventory Debt Tracking (quick_swap) ---
         if order.delivery_type == "quick_swap":
-            received = empties_received or 0
-            # If deficit and no proof photo, require evidence
-            total_qty = sum(i.quantity for i in (await session.execute(
-                select(OrderItem).where(OrderItem.order_id == order.id)
-            )).scalars().all()) if not proof_url and received == 0 else received
+            from models.vendor_rider_model import VendorRiderRegistry
             
+            registry_result = await session.execute(
+                select(VendorRiderRegistry).where(
+                    and_(
+                        VendorRiderRegistry.rider_id == deliverer.id,
+                        VendorRiderRegistry.vendor_id == order.vendor_id
+                    )
+                )
+            )
+            reg_entry = registry_result.scalar_one_or_none()
+            
+            items = (await session.execute(
+                select(OrderItem).options(joinedload(OrderItem.product)).where(OrderItem.order_id == order.id)
+            )).scalars().all()
+            
+            total_qty = 0
+            for item in items:
+                total_qty += item.quantity
+                if reg_entry and item.product and hasattr(item.product, 'capacity'):
+                    cap = int(item.product.capacity or 0)
+                    if cap == 20:
+                        reg_entry.pending_20L_empties = (reg_entry.pending_20L_empties or 0) + item.quantity
+                    elif cap == 10:
+                        reg_entry.pending_10L_empties = (reg_entry.pending_10L_empties or 0) + item.quantity
+
+            received = empties_received or 0
             if received < total_qty and not proof_url:
                 raise HTTPException(status_code=400, detail="Proof of delivery photo is mandatory when reporting missing empty bottles.")
         
@@ -280,6 +326,29 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
         if customer.push_token:
             asyncio.create_task(send_push_message(
                 to=customer.push_token,
+                title=title,
+                body=body,
+                data={"url": action_url}
+            ))
+
+    # Notify Vendor
+    if vendor:
+        title = "Order Delivery Update 📦"
+        body = f"Order #{str(order.id)[-6:]} has been {new_status} by the rider."
+        action_url = "/(screens)/Orders"
+        await create_notification(
+            session=session,
+            user_id=vendor.id,
+            user_type="vendor",
+            title=title,
+            message=body,
+            message_type="delivery_update",
+            action_url=action_url,
+            related_order_id=order.id
+        )
+        if vendor.push_token:
+            asyncio.create_task(send_push_message(
+                to=vendor.push_token,
                 title=title,
                 body=body,
                 data={"url": action_url}
@@ -474,85 +543,103 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
         raise HTTPException(status_code=400, detail="You must be online and available to accept orders.")
 
     # Concurrency safe lock with joinedload for anti-fraud checks
-    query = select(Order).options(joinedload(Order.user), joinedload(Order.vendor)).where(Order.id == order_id).with_for_update(nowait=True)
-    try:
-        result = await session.execute(query)
-        order = result.scalar_one_or_none()
-    except DBAPIError:
-        # PostgreSQL raises error if unable to get the lock due to nowait=True
-        await session.rollback()
-        raise HTTPException(status_code=409, detail="This order has already been claimed by another rider.")
+    from core.redis_client import redis_lock
+    lock_key = f"order_accept_lock:{order_id}"
+    
+    async with redis_lock(lock_key, timeout_seconds=10) as acquired:
+        if not acquired:
+            raise HTTPException(status_code=409, detail="Another rider is currently trying to accept this order. Please try again in a moment.")
 
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+        query = select(Order).options(joinedload(Order.user), joinedload(Order.vendor)).where(Order.id == order_id).with_for_update(nowait=True)
+        try:
+            result = await session.execute(query)
+            order = result.scalar_one_or_none()
+        except DBAPIError:
+            # PostgreSQL raises error if unable to get the lock due to nowait=True
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="This order has already been claimed by another rider.")
 
-    # Anti-Fraud: Verify rider is approved by this specific vendor
-    from models.vendor_rider_model import VendorRiderRegistry
-    registry_check = await session.execute(
-        select(VendorRiderRegistry).where(
-            VendorRiderRegistry.rider_id == deliverer.id,
-            VendorRiderRegistry.vendor_id == order.vendor_id,
-            VendorRiderRegistry.status == "approved"
+        if not order:
+            raise HTTPException(status_code=404, detail="Order not found")
+
+        # --- Cash Order Float Check (Zero-Fraud) ---
+        if order.payment_method == "cash":
+            required_float = float(order.vendor_net or 0) + float(order.platform_total or 0)
+            current_balance = float(deliverer.wallet_balance or 0)
+            if current_balance < required_float:
+                await session.rollback()
+                raise HTTPException(
+                    status_code=402, 
+                    detail=f"Insufficient Wallet Balance. You need at least KSH {required_float:,.2f} to accept this Cash order. Your balance is KSH {current_balance:,.2f}."
+                )
+
+        # Anti-Fraud: Verify rider is approved by this specific vendor
+        from models.vendor_rider_model import VendorRiderRegistry
+        registry_check = await session.execute(
+            select(VendorRiderRegistry).where(
+                VendorRiderRegistry.rider_id == deliverer.id,
+                VendorRiderRegistry.vendor_id == order.vendor_id,
+                VendorRiderRegistry.status == "approved"
+            )
         )
-    )
-    if not registry_check.scalar_one_or_none():
-        await session.rollback()
-        raise HTTPException(status_code=403, detail="You are not approved by this vendor to deliver their orders.")
+        if not registry_check.scalar_one_or_none():
+            await session.rollback()
+            raise HTTPException(status_code=403, detail="You are not approved by this vendor to deliver their orders.")
 
-    # Anti-Fraud: Self-Dealing Prevention
-    if order.user and order.user.clerk_id == clerk_id:
-        await session.rollback()
-        raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver your own personal order.")
-    if order.vendor and (order.vendor.clerk_id == clerk_id or order.vendor.staff_clerk_id == clerk_id):
-        await session.rollback()
-        raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver for a store you manage.")
+        # Anti-Fraud: Self-Dealing Prevention
+        if order.user and order.user.clerk_id == clerk_id:
+            await session.rollback()
+            raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver your own personal order.")
+        if order.vendor and (order.vendor.clerk_id == clerk_id or order.vendor.staff_clerk_id == clerk_id):
+            await session.rollback()
+            raise HTTPException(status_code=403, detail="Self-dealing prohibited. You cannot deliver for a store you manage.")
 
-    if order.order_status != "unassigned" or order.deliverer_id is not None:
-        await session.rollback()
-        raise HTTPException(status_code=409, detail="This order has already been claimed by another rider.")
+        if order.order_status != "unassigned" or order.deliverer_id is not None:
+            await session.rollback()
+            raise HTTPException(status_code=409, detail="This order has already been claimed by another rider.")
 
-    # SEC-03 FIX: Vendor Fleet Integrity Check
-    # Verify rider is approved for this vendor, or auto-register for Tier 2 Trip Radar claims
-    from models.vendor_rider_model import VendorRiderRegistry
-    registry_q = select(VendorRiderRegistry).where(
-        and_(
-            VendorRiderRegistry.rider_id == deliverer.id,
-            VendorRiderRegistry.vendor_id == order.vendor_id,
-            VendorRiderRegistry.status == "approved"
+        # SEC-03 FIX: Vendor Fleet Integrity Check
+        # Verify rider is approved for this vendor, or auto-register for Tier 2 Trip Radar claims
+        from models.vendor_rider_model import VendorRiderRegistry
+        registry_q = select(VendorRiderRegistry).where(
+            and_(
+                VendorRiderRegistry.rider_id == deliverer.id,
+                VendorRiderRegistry.vendor_id == order.vendor_id,
+                VendorRiderRegistry.status == "approved"
+            )
         )
-    )
-    registry_result = await session.execute(registry_q)
-    if not registry_result.scalar_one_or_none():
-        # Auto-register gig rider for this vendor (Trip Radar Tier 2 implicit approval)
-        new_registration = VendorRiderRegistry(
-            rider_id=deliverer.id,
-            vendor_id=order.vendor_id,
-            status="approved"
-        )
-        session.add(new_registration)
-        logger.info(f"Trip Radar: Auto-registered rider {deliverer.id} for vendor {order.vendor_id}")
+        registry_result = await session.execute(registry_q)
+        if not registry_result.scalar_one_or_none():
+            # Auto-register gig rider for this vendor (Trip Radar Tier 2 implicit approval)
+            new_registration = VendorRiderRegistry(
+                rider_id=deliverer.id,
+                vendor_id=order.vendor_id,
+                status="approved"
+            )
+            session.add(new_registration)
+            logger.info(f"Trip Radar: Auto-registered rider {deliverer.id} for vendor {order.vendor_id}")
 
-    # Success: Claim the order
-    order.deliverer_id = deliverer.id
-    order.order_status = "pending"
-    deliverer.is_available = False # F-030 Single-Client Constraint Enforcement
+        # Success: Claim the order
+        order.deliverer_id = deliverer.id
+        order.order_status = "pending"
+        deliverer.is_available = False # F-030 Single-Client Constraint Enforcement
 
-    # --- Gamification Ledger Recalculation ---
-    # The order was created assuming 10% commission. If this rider is Platinum, reduce to 7%.
-    # FIN-01 FIX: Use Decimal for currency precision
-    if deliverer.is_platinum and order.rider_commission and order.rider_commission > 0:
-        from decimal import Decimal, ROUND_HALF_UP
-        from services.order_service import GIG_PLATINUM_COMMISSION
-        delivery_fee_d = Decimal(str(order.delivery_fee))
-        new_commission = (delivery_fee_d * Decimal(str(GIG_PLATINUM_COMMISSION))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        old_commission = Decimal(str(order.rider_commission))
-        commission_diff = old_commission - new_commission
-        if commission_diff > 0:
-            order.rider_commission = float(new_commission)
-            order.rider_net = float(Decimal(str(order.rider_net)) + commission_diff)
-            order.platform_total = float(Decimal(str(order.platform_total)) - commission_diff)
+        # --- Gamification Ledger Recalculation ---
+        # The order was created assuming 10% commission. If this rider is Platinum, reduce to 7%.
+        # FIN-01 FIX: Use Decimal for currency precision
+        if deliverer.is_platinum and order.rider_commission and order.rider_commission > 0:
+            from decimal import Decimal, ROUND_HALF_UP
+            from services.order_service import GIG_PLATINUM_COMMISSION
+            delivery_fee_d = Decimal(str(order.delivery_fee))
+            new_commission = (delivery_fee_d * Decimal(str(GIG_PLATINUM_COMMISSION))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            old_commission = Decimal(str(order.rider_commission))
+            commission_diff = old_commission - new_commission
+            if commission_diff > 0:
+                order.rider_commission = float(new_commission)
+                order.rider_net = float(Decimal(str(order.rider_net)) + commission_diff)
+                order.platform_total = float(Decimal(str(order.platform_total)) - commission_diff)
 
-    await session.commit()
+        await session.commit()
 
     # Broadcast Assignment to the group so other riders see it disappear
     try:
@@ -571,6 +658,54 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
     except Exception as e:
         logger.error(f"WS broadcast fail in accept_delivery_radar: {e}")
 
+    # Notify Customer
+    customer = await session.get(User, order.customer_id)
+    if customer:
+        title = "Rider Assigned 🛵"
+        body = f"{deliverer.full_name} is on the way to pick up your order!"
+        action_url = f"/(screens)/OrderDetail/{order.id}"
+        await create_notification(
+            session=session,
+            user_id=customer.id,
+            user_type="customer",
+            title=title,
+            message=body,
+            message_type="order_assigned",
+            action_url=action_url,
+            related_order_id=order.id
+        )
+        if customer.push_token:
+            asyncio.create_task(send_push_message(
+                to=customer.push_token,
+                title=title,
+                body=body,
+                data={"url": action_url}
+            ))
+            
+    # Notify Vendor
+    vendor = await session.get(Vendor, order.vendor_id)
+    if vendor:
+        title = "Rider Claimed Order 🛵"
+        body = f"{deliverer.full_name} has claimed Order #{str(order.id)[-6:]}."
+        action_url = "/(screens)/Orders"
+        await create_notification(
+            session=session,
+            user_id=vendor.id,
+            user_type="vendor",
+            title=title,
+            message=body,
+            message_type="order_assigned",
+            action_url=action_url,
+            related_order_id=order.id
+        )
+        if vendor.push_token:
+            asyncio.create_task(send_push_message(
+                to=vendor.push_token,
+                title=title,
+                body=body,
+                data={"url": action_url}
+            ))
+
     return {
         "message": "Delivery claimed successfully!",
         "order_id": str(order.id),
@@ -578,7 +713,7 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
     }
 
 
-async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id: UUID):
+async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id: UUID, actual_floor_level: int | None = None):
     """
     Rider reports the customer lied about their floor level.
     Pauses delivery to 'mismatch_pending'. Customer must accept a surcharge or come downstairs.
@@ -595,6 +730,11 @@ async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id
         raise HTTPException(status_code=400, detail="Order is already delivered")
 
     order.order_status = "mismatch_pending"
+    
+    # Store the actual floor level reported by the rider for surcharge recalculation
+    if actual_floor_level is not None and hasattr(order, 'actual_floor_level'):
+        order.actual_floor_level = actual_floor_level
+    
     await session.commit()
 
     # Trigger a WebSocket broadcast or FCM push notification to the customer here.
@@ -608,6 +748,7 @@ async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id
                 "action": "ORDER_STATUS_UPDATE", 
                 "order_id": str(order.id), 
                 "status": "mismatch_pending",
+                "actual_floor_level": actual_floor_level,
                 "message": "Rider reported an address mismatch. Please come to the ground floor to pick up your bottles."
             }
         )
@@ -621,10 +762,21 @@ async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id
             session=session,
             user_id=order.customer_id,
             user_type="customer",
-            title="Delivery Paused",
-            body="Rider arrived but reported an address mismatch. Please come to the ground floor to pick up your bottles.",
-            data={"order_id": str(order.id), "status": "mismatch_pending"}
+            title="Delivery Paused ⚠️",
+            message="Rider arrived but reported an address mismatch. Please come to the ground floor to pick up your bottles.",
+            message_type="delivery_update",
+            related_order_id=order.id,
+            data={"order_id": str(order.id), "status": "mismatch_pending", "actual_floor_level": actual_floor_level}
         )
+        
+        customer = await session.get(User, order.customer_id)
+        if customer and customer.push_token:
+            asyncio.create_task(send_push_message(
+                to=customer.push_token,
+                title="Delivery Paused ⚠️",
+                body="Rider arrived but reported an address mismatch. Please come to the ground floor to pick up your bottles.",
+                data={"url": f"/(screens)/OrderDetail/{order.id}"}
+            ))
     except Exception as e:
         import logging
         logging.getLogger(__name__).error(f"Notification creation failed: {e}")
@@ -754,3 +906,210 @@ async def get_deliverer_reviews(session: AsyncSession, clerk_id: str):
         "distribution": distribution,
         "reviews": formatted_reviews
     }
+
+
+
+async def cancel_delivery(session: AsyncSession, clerk_id: str, order_id: str, reason: str, details: str = None):
+    """
+    Handles a Rider cancelling/rejecting an order.
+    Depending on the state and reason, this will either:
+    1. Unassign the rider and dispatch to a new rider.
+    2. Cancel the order entirely.
+    """
+    from services.deliverer_service import get_deliverer_by_clerk_id
+    from services.notification_service import create_notification
+    from services.push_notification_service import send_push_message
+    
+    deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
+    if not deliverer:
+        raise HTTPException(status_code=404, detail="Rider account not found.")
+
+    order = await session.get(Order, order_id)
+    if not order or order.deliverer_id != deliverer.id:
+        raise HTTPException(status_code=404, detail="This order is not assigned to you.")
+
+    # Matrix of reasons
+    vendor_fault_reasons = ["vendor_closed", "out_of_stock"]
+    rider_fault_reasons = ["vehicle_issue", "accident", "other"]
+    post_pickup_reasons = ["vehicle_issue", "accident", "customer_unreachable", "customer_refused", "other"]
+
+    previous_rider_id = order.deliverer_id
+    action_taken = ""
+
+    if order.order_status in ["pending", "accepted", "preparing", "ready"]:
+        if reason in vendor_fault_reasons:
+            action_taken = "cancelled"
+        else:
+            action_taken = "unassigned"
+    elif order.order_status == "in_transit":
+        action_taken = "cancelled"
+    else:
+        raise HTTPException(status_code=400, detail=f"Cannot cancel order in state {order.order_status}")
+
+    order.cancellation_reason = f"{reason}: {details}" if details else reason
+
+    if action_taken == "unassigned":
+        order.deliverer_id = None
+        order.order_status = "unassigned"
+        deliverer.is_available = True
+    else:
+        # action_taken == "cancelled"
+        order.order_status = "cancelled"
+        deliverer.is_available = True
+        
+        # Restore stock
+        items_q = select(OrderItem).where(OrderItem.order_id == order.id)
+        result = await session.execute(items_q)
+        items = result.scalars().all()
+        for item in items:
+            await session.execute(
+                update(Product)
+                .where(Product.id == item.product_id)
+                .values(stock=Product.stock + item.quantity, is_available=True)
+            )
+
+        # Flag paid orders for refund
+        if order.payment_status == "paid":
+            order.payment_status = "refund_pending"
+            order.commission_lost = order.platform_total
+
+    await session.commit()
+
+    # WebSockets
+    try:
+        from routes.websocket_routes import manager
+        await manager.broadcast_order_update(
+            vendor_id=str(order.vendor_id),
+            customer_id=str(order.customer_id),
+            deliverer_id=str(previous_rider_id) if previous_rider_id else "",
+            payload={
+                "action": "ORDER_STATUS_UPDATE",
+                "order_id": str(order.id),
+                "status": action_taken,
+                "reason": "rider_cancelled",
+            }
+        )
+    except Exception as e:
+        logger.error(f"WS Broadcast fail in cancel_delivery: {e}")
+
+    # Notifications
+    if action_taken == "unassigned":
+        # Same as reject_delivery
+        vendor = await session.get(Vendor, order.vendor_id)
+        if vendor:
+            title = "Rider Issue 🔄"
+            body = f"Rider reported an issue ({reason}). Finding a new rider."
+            action_url = "/(screens)/Orders"
+            await create_notification(session=session, user_id=vendor.id, user_type="vendor", title=title, message=body, message_type="delivery_update", action_url=action_url, related_order_id=order.id)
+            if vendor.push_token:
+                asyncio.create_task(send_push_message(to=vendor.push_token, title=title, body=body, data={"url": action_url}))
+        
+        customer = await session.get(User, order.customer_id)
+        if customer:
+            title = "Finding a New Rider 🔄"
+            body = "Your previous rider had an issue. We are dispatching a new rider!"
+            action_url = "/(screens)/Orders"
+            await create_notification(session=session, user_id=customer.id, user_type="customer", title=title, message=body, message_type="delivery_update", action_url=action_url, related_order_id=order.id)
+            if customer.push_token:
+                asyncio.create_task(send_push_message(to=customer.push_token, title=title, body=body, data={"url": action_url}))
+    else:
+        # action_taken == "cancelled"
+        vendor = await session.get(Vendor, order.vendor_id)
+        if vendor:
+            title = "Delivery Cancelled ❌"
+            body = f"Rider cancelled the delivery. Reason: {reason}."
+            if order.order_status == "cancelled" and reason not in vendor_fault_reasons:
+                body += " The rider must return the goods to you."
+            action_url = "/(screens)/Orders"
+            await create_notification(session=session, user_id=vendor.id, user_type="vendor", title=title, message=body, message_type="order_cancelled", action_url=action_url, related_order_id=order.id)
+            if vendor.push_token:
+                asyncio.create_task(send_push_message(to=vendor.push_token, title=title, body=body, data={"url": action_url}))
+        
+        customer = await session.get(User, order.customer_id)
+        if customer:
+            title = "Delivery Cancelled ❌"
+            body = "We are sorry, but your delivery was cancelled due to an issue."
+            if order.payment_status == "refund_pending":
+                body += " Your refund will be processed shortly."
+            action_url = "/(screens)/Orders"
+            await create_notification(session=session, user_id=customer.id, user_type="customer", title=title, message=body, message_type="order_cancelled", action_url=action_url, related_order_id=order.id)
+            if customer.push_token:
+                asyncio.create_task(send_push_message(to=customer.push_token, title=title, body=body, data={"url": action_url}))
+
+    return {"message": "Cancellation processed", "action_taken": action_taken, "order_id": str(order.id)}
+
+async def flush_tracking_logs():
+    """Reads batched tracking logs from Redis and bulk inserts into Postgres."""
+    from core.redis_client import get_redis
+    r = get_redis()
+    if not r:
+        return
+
+    # LPOP all logs currently in the list
+    logs_to_insert = []
+    try:
+        while True:
+            raw = await r.lpop("gps_tracking_logs")
+            if not raw:
+                break
+            
+            import json
+            data = json.loads(raw)
+            logs_to_insert.append(data)
+            
+            # Batch size limit per flush to avoid massive transactions
+            if len(logs_to_insert) >= 500:
+                break
+    except Exception as e:
+        logger.error(f"Failed to pop gps_tracking_logs from Redis: {e}")
+
+    if not logs_to_insert:
+        return
+
+    from dependencies.dependencies import get_db_session
+    from models.order_tracking_log_model import OrderTrackingLog
+    from sqlalchemy import update
+    import uuid
+    
+    # Process batch
+    async with get_db_session() as session:
+        try:
+            # First, update deliverer current locations (group by rider to only apply the latest)
+            rider_latest = {}
+            for entry in logs_to_insert:
+                rider_latest[entry["rider_id"]] = entry
+                
+            for rider_id, loc in rider_latest.items():
+                await update_deliverer_location_by_id(
+                    session=session,
+                    deliverer_id=rider_id,
+                    lat=loc["lat"],
+                    lng=loc["lng"]
+                )
+                
+            # Then, bulk insert order tracking logs
+            tracking_records = []
+            for entry in logs_to_insert:
+                if entry.get("order_id"):
+                    try:
+                        o_id = uuid.UUID(entry["order_id"])
+                        tracking_records.append(OrderTrackingLog(
+                            order_id=o_id,
+                            lat=entry["lat"],
+                            lng=entry["lng"],
+                            heading=entry["heading"],
+                            speed=entry["speed"]
+                        ))
+                    except ValueError:
+                        pass
+                        
+            if tracking_records:
+                session.add_all(tracking_records)
+                
+            await session.commit()
+            logger.info(f"Flushed {len(logs_to_insert)} tracking logs to DB.")
+        except Exception as e:
+            logger.error(f"Failed to flush tracking logs to DB: {e}")
+            await session.rollback()
+            # If we wanted to guarantee no data loss, we could RPUSH them back, 
+            # but for tracking data it's okay to drop them to prevent endless poison loops.

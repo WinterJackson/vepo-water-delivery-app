@@ -146,6 +146,11 @@ export const ROUTES = {
     UPDATE_SAVED_LOCATION: (id: string) => `${BASE_URL}/api/auth/saved-locations/${id}`,
     DELETE_SAVED_LOCATION: (id: string) => `${BASE_URL}/api/auth/saved-locations/${id}`,
     USE_SAVED_LOCATION: (id: string) => `${BASE_URL}/api/auth/saved-locations/${id}/use`,
+
+    // Wallet
+    WALLET_TOP_UP: `${BASE_URL}/api/wallet/top-up`,
+    WALLET_WITHDRAW: `${BASE_URL}/api/wallet/withdraw`,
+    GET_TRANSACTIONS: `${BASE_URL}/api/wallet/transactions`,
 } as const;
 
 export default ApiRoutes;

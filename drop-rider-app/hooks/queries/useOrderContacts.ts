@@ -17,7 +17,7 @@ export interface OrderContactsResponse {
 }
 
 // Active states where contacts are available
-const CONTACT_VISIBLE_STATES = ["accepted", "assigned", "preparing", "ready", "picked_up", "in_transit", "arrived", "mismatch_pending"];
+const CONTACT_VISIBLE_STATES = ["pending", "accepted", "assigned", "preparing", "ready", "picked_up", "in_transit", "arrived", "mismatch_pending", "pending_review"];
 
 // ─── Fetch Function ───────────────────────────────────────────────────────────
 async function fetchOrderContacts(orderId: string, token: string | null): Promise<OrderContactsResponse> {

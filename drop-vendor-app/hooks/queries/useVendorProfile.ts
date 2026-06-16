@@ -17,6 +17,7 @@ export interface VendorProfile {
     rating?: number;
     verification_status?: string;
     role?: "owner" | "staff";
+    wallet_balance?: number;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────

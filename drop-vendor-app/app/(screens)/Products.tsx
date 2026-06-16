@@ -24,8 +24,9 @@ import { trackEvent } from "@/utils/analytics";
 import { Popup } from "@/lib/popup";
 import SearchBar from "@/components/common/Search";
 import { useVendorProducts } from "@/hooks/queries/useVendorProducts";
+import { useDebounce } from "@/hooks/useDebounce";
 
-const ProductCard = memo(({ item, darkTheme, onDelete, onToggleAvailability }: { item: any, darkTheme: boolean, onDelete: (id: string) => void, onToggleAvailability: (id: string, isAvailable: boolean) => void }) => {
+const ProductCard = memo(({ item, darkTheme, onDelete, onEdit, onToggleAvailability, onUpdateStock }: { item: any, darkTheme: boolean, onDelete: (id: string) => void, onEdit: (id: string) => void, onToggleAvailability: (id: string, isAvailable: boolean) => void, onUpdateStock: (id: string, newStock: number) => void }) => {
   return (
     <View 
       className={`flex-row items-center p-5 mb-4 rounded-[24px] border shadow-sm ${item.stock === 0 ? "opacity-60" : ""} ${darkTheme ? "bg-surface-container border-transparent" : "bg-white border-gray-200"}`} 
@@ -51,9 +52,17 @@ const ProductCard = memo(({ item, darkTheme, onDelete, onToggleAvailability }: {
             KSH {item.price}
           </Text>
           <View className="w-1 h-1 rounded-full bg-slate-300" />
-          <Text className={`text-sm ${item.stock <= 5 ? "text-red-500 font-bold" : darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-            Stock: {item.stock}
-          </Text>
+          <View className="flex-row items-center gap-3 bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1">
+            <PressableScale onPress={() => onUpdateStock(item.id, Math.max(0, item.stock - 1))} className={`w-6 h-6 rounded-md items-center justify-center ${darkTheme ? "bg-slate-700" : "bg-white shadow-sm"}`}>
+              <Ionicons name="remove" size={14} color={darkTheme ? "white" : "black"} />
+            </PressableScale>
+            <Text className={`text-sm font-bold ${item.stock <= 5 ? "text-red-500" : darkTheme ? "text-white" : "text-slate-900"}`}>
+              {item.stock}
+            </Text>
+            <PressableScale onPress={() => onUpdateStock(item.id, item.stock + 1)} className={`w-6 h-6 rounded-md items-center justify-center ${darkTheme ? "bg-slate-700" : "bg-white shadow-sm"}`}>
+              <Ionicons name="add" size={14} color={darkTheme ? "white" : "black"} />
+            </PressableScale>
+          </View>
         </View>
       </View>
       
@@ -65,6 +74,12 @@ const ProductCard = memo(({ item, darkTheme, onDelete, onToggleAvailability }: {
           thumbColor={item.is_available ? "#fff" : "#f4f3f4"}
           style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
         />
+        <PressableScale 
+          onPress={() => onEdit(item.id)} 
+          className={`w-10 h-10 rounded-full items-center justify-center ${darkTheme ? "bg-blue-900/20" : "bg-blue-50"}`}
+        >
+          <Ionicons name="pencil-outline" size={18} color="#3b82f6" />
+        </PressableScale>
         <PressableScale 
           onPress={() => onDelete(item.id)} 
           className={`w-10 h-10 rounded-full items-center justify-center ${darkTheme ? "bg-red-900/20" : "bg-red-50"}`}
@@ -85,6 +100,7 @@ export default function Products() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [searchState, setSearchState] = useState("");
 
   const {
@@ -153,21 +169,38 @@ export default function Products() {
     }
   }, [getToken, refetch]);
 
+  const handleUpdateStock = useCallback(async (productId: string, newStock: number) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const token = await getToken();
+    const route = VendorApiRoutes.UpdateProduct(productId);
+    try {
+      await fetch(route.path, {
+        method: route.method,
+        headers: { 
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ stock: newStock }),
+      });
+      await refetch();
+    } catch (e) {
+      if (__DEV__) console.error("Update stock error:", e);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [getToken, refetch]);
+
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery.trim().length > 1) {
-        setSearchState(searchQuery.trim());
-        trackEvent('vendor_inventory_search', { query: searchQuery.trim(), count: filteredProducts.length });
-      } else {
-        setSearchState("");
-      }
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, filteredProducts.length]);
+    if (debouncedSearchQuery.trim().length > 1) {
+      setSearchState(debouncedSearchQuery.trim());
+      trackEvent('vendor_inventory_search', { query: debouncedSearchQuery.trim(), count: filteredProducts.length });
+    } else {
+      setSearchState("");
+    }
+  }, [debouncedSearchQuery, filteredProducts.length]);
 
   const renderItem = useCallback(({ item }: { item: any }) => (
-    <ProductCard item={item} darkTheme={darkTheme} onDelete={handleDelete} onToggleAvailability={handleToggleAvailability} />
-  ), [darkTheme, handleDelete, handleToggleAvailability]);
+    <ProductCard item={item} darkTheme={darkTheme} onDelete={handleDelete} onEdit={(id) => router.push(`/(screens)/EditProduct/${id}` as any)} onToggleAvailability={handleToggleAvailability} onUpdateStock={handleUpdateStock} />
+  ), [darkTheme, handleDelete, handleToggleAvailability, handleUpdateStock, router]);
 
   return (
     <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>

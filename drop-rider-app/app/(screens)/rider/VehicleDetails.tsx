@@ -106,7 +106,7 @@ export default function VehicleDetails() {
                     label="Vehicle Type" 
                     value={vehicleType} 
                     onValueChange={setVehicleType} 
-                    style="w-full max-w-full mb-6"
+                    containerStyle={{ width: "100%", maxWidth: "100%", marginBottom: 24 }}
                 />
 
                 <PressableScale activeOpacity={0.8} onPress={handleSave} disabled={isSaving}>

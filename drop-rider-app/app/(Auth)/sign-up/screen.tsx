@@ -296,7 +296,7 @@ export default function SignUp() {
                                 label="Vehicle Type"
                                 value={vehicleType}
                                 onValueChange={setVehicleType}
-                                style="w-full max-w-full"
+                                containerStyle={{ width: "100%", maxWidth: "100%" }}
                             />
                         </View>
                         <View>

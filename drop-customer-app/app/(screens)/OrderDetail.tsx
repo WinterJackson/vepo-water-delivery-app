@@ -2,7 +2,7 @@ import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { OrderDetailSkeleton } from "@/components/skeletons/ContextualSkeletons";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { BRAND, TOAST } from "@/constants/brandColors";
-import { useOrders, useCancelOrder, Order } from "@/hooks/queries/useOrders";
+import { useOrders, useCancelOrder, Order, useOrderTrackingLogs } from "@/hooks/queries/useOrders";
 import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts";
 import { Toast } from "@/lib/toast";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -17,7 +17,8 @@ import {
     Platform,
     Dimensions,
     Modal,
-    Linking
+    Linking,
+    Alert
 } from "react-native";
 import { useRiderTracking } from "@/hooks/queries/useRiderTracking";
 
@@ -25,17 +26,23 @@ let MapView: any = null;
 let Marker: any = null;
 let AnimatedRegion: any = null;
 let MarkerAnimated: any = null;
+let Polyline: any = null;
+let PROVIDER_GOOGLE: any = null;
 if (Platform.OS !== 'web') {
     const maps = require('react-native-maps');
     MapView = maps.default;
     Marker = maps.Marker;
     AnimatedRegion = maps.AnimatedRegion;
     MarkerAnimated = maps.MarkerAnimated;
+    Polyline = maps.Polyline;
+    PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
 } else {
     MapView = ({ style, children }: any) => <View style={style}>{children}</View>;
     Marker = () => null;
     AnimatedRegion = null;
     MarkerAnimated = () => null;
+    Polyline = () => null;
+    PROVIDER_GOOGLE = 'google';
 }
 
 const { width } = Dimensions.get("window");
@@ -65,14 +72,27 @@ export default function OrderDetail() {
 
     const handleCancelOrder = () => {
         if (!order) return;
-        cancelOrderMutation(order.id, {
-            onSuccess: () => {
-                Toast.success("Success", "Order cancelled successfully");
-            },
-            onError: (error: Error) => {
-                Toast.error("Error", (error as Error).message || "Failed to cancel order");
-            }
-        });
+        Alert.alert(
+            "Cancel Order",
+            "Are you sure you want to cancel this order? This action cannot be undone.",
+            [
+                { text: "No, Keep It", style: "cancel" },
+                {
+                    text: "Yes, Cancel",
+                    style: "destructive",
+                    onPress: () => {
+                        cancelOrderMutation(order.id, {
+                            onSuccess: () => {
+                                Toast.success("Success", "Order cancelled successfully");
+                            },
+                            onError: (error: Error) => {
+                                Toast.error("Error", (error as Error).message || "Failed to cancel order");
+                            }
+                        });
+                    }
+                }
+            ]
+        );
     };
 
     const { data: orders = [], isLoading: ordersLoading } = useOrders();
@@ -86,6 +106,7 @@ export default function OrderDetail() {
 
     const shouldTrackRider = order?.order_status === "picked_up" || order?.order_status === "in_transit" || order?.order_status === "mismatch_pending";
     const { data: riderLocation } = useRiderTracking(order?.id || null, shouldTrackRider);
+    const { data: trackingLogs } = useOrderTrackingLogs(order?.id || null);
 
     // Cross-party contact info (only fetched during active states)
     const { data: contactsData } = useOrderContacts(order?.id || null, order?.order_status || null);
@@ -271,25 +292,29 @@ export default function OrderDetail() {
                      )}
                  </View>
 
-                 {/* Rider Live Tracking Map */}
-                 {shouldTrackRider && riderLocation?.lat && riderLocation?.lng && MapView && (
+                 {/* Rider Live Tracking / Historical Map */}
+                 {((shouldTrackRider && riderLocation?.lat && riderLocation?.lng) || (order.order_status === "delivered" && trackingLogs && trackingLogs.length > 0)) && MapView && (
                      <View className={`rounded-2xl overflow-hidden mb-5 border ${darkTheme ? "border-gray-800 bg-white/5" : "border-gray-200 bg-white"}`}>
                          <View className="p-4 border-b border-gray-200 dark:border-gray-800 flex-row justify-between items-center">
                              <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-black"}`}>
-                                 Rider Location
+                                 {order.order_status === "delivered" ? "Route History" : "Rider Location"}
                              </Text>
-                             <View className="flex-row items-center gap-2">
-                                 <View className="w-2 h-2 rounded-full bg-green-500" />
-                                 <Text className="text-green-500 font-semibold text-sm">Live</Text>
-                             </View>
+                             {shouldTrackRider && (
+                                <View className="flex-row items-center gap-2">
+                                    <View className="w-2 h-2 rounded-full bg-green-500" />
+                                    <Text className="text-green-500 font-semibold text-sm">Live</Text>
+                                </View>
+                             )}
                          </View>
                          <View className="h-48 w-full bg-gray-200">
                             <MapView
                                  ref={mapRef}
+                                 provider={PROVIDER_GOOGLE}
+                                 mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
                                  style={{ flex: 1 }}
                                  initialRegion={{
-                                     latitude: riderLocation.lat,
-                                     longitude: riderLocation.lng,
+                                     latitude: shouldTrackRider && riderLocation ? riderLocation.lat : trackingLogs?.[0]?.lat,
+                                     longitude: shouldTrackRider && riderLocation ? riderLocation.lng : trackingLogs?.[0]?.lng,
                                      latitudeDelta: 0.015,
                                      longitudeDelta: 0.015,
                                  }}
@@ -298,7 +323,7 @@ export default function OrderDetail() {
                                  pitchEnabled={false}
                                  rotateEnabled={false}
                              >
-                                 {MarkerAnimated && Platform.OS !== 'web' ? (
+                                 {shouldTrackRider && riderLocation && (MarkerAnimated && Platform.OS !== 'web' ? (
                                      <MarkerAnimated
                                          ref={markerRef}
                                          coordinate={{ latitude: riderLocation.lat, longitude: riderLocation.lng }}
@@ -312,22 +337,47 @@ export default function OrderDetail() {
                                          title={riderLocation.rider_name || "Rider"}
                                          pinColor="blue"
                                      />
+                                 ))}
+                                 
+                                 {order.order_status === "delivered" && trackingLogs && trackingLogs.length > 0 && Polyline && (
+                                     <>
+                                         <Polyline
+                                             coordinates={trackingLogs.map((log: any) => ({
+                                                 latitude: log.lat,
+                                                 longitude: log.lng,
+                                             }))}
+                                             strokeColor={BRAND.primary}
+                                             strokeWidth={4}
+                                         />
+                                         <Marker
+                                             coordinate={{ latitude: trackingLogs[0].lat, longitude: trackingLogs[0].lng }}
+                                             title="Start"
+                                             pinColor="green"
+                                         />
+                                         <Marker
+                                             coordinate={{ latitude: trackingLogs[trackingLogs.length - 1].lat, longitude: trackingLogs[trackingLogs.length - 1].lng }}
+                                             title="Delivery Location"
+                                             pinColor="blue"
+                                         />
+                                     </>
                                  )}
                              </MapView>
                          </View>
-                         <View className="p-4 flex-row items-center gap-3">
-                             <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center">
-                                 <Text style={{ fontSize: 20 }}>🛵</Text>
+                         {shouldTrackRider && riderLocation && (
+                             <View className="p-4 flex-row items-center gap-3">
+                                 <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center">
+                                     <Text style={{ fontSize: 20 }}>🛵</Text>
+                                 </View>
+                                 <View>
+                                     <Text className={`font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
+                                         {riderLocation.rider_name || "Your Rider"}
+                                     </Text>
+                                     <Text className={`text-sm ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                         Will arrive soon
+                                     </Text>
+                                 </View>
                              </View>
-                             <View>
-                                 <Text className={`font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
-                                     {riderLocation.rider_name || "Your Rider"}
-                                 </Text>
-                                 <Text className={`text-sm ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-                                     Will arrive soon
-                                 </Text>
-                             </View>
-                         </View>
+                         )}
                      </View>
                  )}
 
@@ -493,6 +543,20 @@ export default function OrderDetail() {
                                     minute: "2-digit",
                                 }) : "Unknown Date"}
                             </Text>
+                        </View>
+                        <View className="flex-row justify-between mt-1 pt-2 border-t border-gray-200 dark:border-gray-800">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Payment Method</Text>
+                            {order.payment_method === "cash" ? (
+                                <View className="flex-row items-center gap-1">
+                                    <Text className="text-amber-500 font-bold">Cash on Delivery</Text>
+                                    <Text className="text-amber-500">💰</Text>
+                                </View>
+                            ) : (
+                                <View className="flex-row items-center gap-1">
+                                    <Text className="text-green-500 font-bold">M-PESA</Text>
+                                    <Text className="text-green-500">✅</Text>
+                                </View>
+                            )}
                         </View>
                     </View>
                 </View>

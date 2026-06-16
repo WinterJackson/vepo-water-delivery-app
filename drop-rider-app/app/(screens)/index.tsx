@@ -80,14 +80,19 @@ export default function Dashboard() {
     })();
   }, [profile?.operation_lat, profile?.operation_lng]);
 
-  // Sync online status with fetched profile (in useEffect to avoid render-loop)
-  const profileAvailable = profile?.is_available;
+  // Sync online status and profile data to store
   useEffect(() => {
-    if (profileAvailable !== undefined && profileAvailable !== isOnline) {
-      setIsOnline(profileAvailable);
-      useRiderStore.setState({ isOnline: profileAvailable });
+    if (profile) {
+      if (profile.is_available !== isOnline) {
+        setIsOnline(profile.is_available);
+      }
+      useRiderStore.setState({ 
+        isOnline: profile.is_available,
+        riderId: profile.id,
+        riderProfile: profile
+      });
     }
-  }, [profileAvailable]);
+  }, [profile]);
 
   // Request location permission once on mount — riders need this immediately
   const locationPrompted = useRef(false);
@@ -364,7 +369,7 @@ export default function Dashboard() {
               <View className="gap-3">
                 <QuickActionCard title="Discover Vendors" subtitle="Find water distribution points" icon="business-outline" route="/(screens)/DiscoverVendors" />
                 <QuickActionCard title="Withdraw Earnings" subtitle="Transfer funds directly to M-Pesa" icon="cash-outline" route="/(screens)/Cashout" />
-                <QuickActionCard title="My Remittances" subtitle="Settle ledgers with your vendors" icon="wallet-outline" route="/(screens)/VendorRemittance" />
+
                 <QuickActionCard title="My Deliveries" subtitle="View your past delivery history" icon="bicycle-outline" route="/(screens)/EarningsHistory" />
                 <QuickActionCard title="My Performance" subtitle="View stats and gamification progress" icon="stats-chart-outline" route="/(screens)/Performance" />
               </View>

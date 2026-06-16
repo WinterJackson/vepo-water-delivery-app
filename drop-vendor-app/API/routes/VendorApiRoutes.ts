@@ -44,6 +44,10 @@ const VendorApiRoutes = {
     path: `${BASE_URL}/api/vendor/products/${id}`,
     method: "DELETE",
   }),
+  GetProduct: (id: string): ApiRoute => ({
+    path: `${BASE_URL}/api/vendor/products/${id}`,
+    method: "GET",
+  }),
   // --- Orders ---
   GetOrders: {
     path: `${BASE_URL}/api/vendor/orders`,
@@ -96,19 +100,6 @@ const VendorApiRoutes = {
     path: `${BASE_URL}/api/notifications/${id}`,
     method: "DELETE",
   }),
-  // --- Vendor Remittance ---
-  GetVendorRemittances: (vendorId: string): ApiRoute => ({
-    path: `${BASE_URL}/api/vendor_remittance/vendor/${vendorId}`,
-    method: "GET",
-  }),
-  StartRemittance: {
-    path: `${BASE_URL}/api/vendor_remittance/start`,
-    method: "POST",
-  } as const satisfies ApiRoute,
-  CloseRemittance: (remittanceId: string): ApiRoute => ({
-    path: `${BASE_URL}/api/vendor_remittance/${remittanceId}/close`,
-    method: "PUT",
-  }),
   // --- Rider Management ---
   GetMyRiders: {
     path: `${BASE_URL}/api/vendor/my-riders`,
@@ -118,11 +109,33 @@ const VendorApiRoutes = {
     path: `${BASE_URL}/api/vendor/rider-action`,
     method: "PUT",
   } as const satisfies ApiRoute,
+  ReceiveBottles: {
+    path: `${BASE_URL}/api/vendor/receive-bottles`,
+    method: "POST",
+  } as const satisfies ApiRoute,
   // --- Account ---
   DeleteAccount: {
     path: `${BASE_URL}/api/auth/delete_account`,
     method: "DELETE",
   } as const satisfies ApiRoute,
+  // --- Wallet ---
+  WalletTopUp: {
+    path: `${BASE_URL}/api/wallet/top-up`,
+    method: "POST",
+  } as const satisfies ApiRoute,
+  WalletWithdraw: {
+    path: `${BASE_URL}/api/wallet/withdraw`,
+    method: "POST",
+  } as const satisfies ApiRoute,
+  GetTransactions: {
+    path: `${BASE_URL}/api/wallet/transactions`,
+    method: "GET",
+  } as const satisfies ApiRoute,
+  // --- Staff Management ---
+  AssignStaff: (email: string): ApiRoute => ({
+    path: `${BASE_URL}/api/vendor/staff?email=${encodeURIComponent(email)}`,
+    method: "PUT",
+  }),
 };
 
 export default VendorApiRoutes;

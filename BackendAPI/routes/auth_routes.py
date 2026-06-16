@@ -38,9 +38,7 @@ def sanitize_phone_number(phone: str) -> str:
     return phone
 
 # Import limiter from main app
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-limiter = Limiter(key_func=get_remote_address)
+from core.redis_client import redis_limiter as limiter
 
 # CREATE USER 
 @router.post("/create_user")
@@ -282,6 +280,11 @@ async def delete_account(
         db_user.push_token = None
         db_user.is_active = False
         db_user.location_address = None
+        db_user.lat = None
+        db_user.lng = None
+        db_user.location = None
+        db_user.payment_methods = []
+        db_user.preferences = {}
 
         await session.commit()
         
@@ -325,6 +328,11 @@ async def delete_account(
         db_vendor.push_token = None
         db_vendor.verification_status = "deleted"
         db_vendor.location_address = None
+        db_vendor.lat = None
+        db_vendor.lng = None
+        db_vendor.location = None
+        db_vendor.business_license = None
+        db_vendor.payment_methods = []
 
         await session.commit()
         
@@ -370,6 +378,13 @@ async def delete_account(
         db_rider.ID_number = "REDACTED"
         db_rider.driver_license = None
         db_rider.plate_number = "REDACTED"
+        db_rider.current_lat = None
+        db_rider.current_lng = None
+        db_rider.operation_lat = None
+        db_rider.operation_lng = None
+        db_rider.location = None
+        db_rider.payment_methods = []
+        db_rider.preferences = {}
 
         await session.commit()
         
@@ -437,7 +452,10 @@ async def get_profile_status(app_type: str, db: AsyncSession = Depends(get_db), 
         if not db_rider.plate_number:
             missing_fields.append("plate_number")
             
-        return {"exists": True, "missing_fields": missing_fields, "data": safe_serialize(db_rider)}
+        rider_data = safe_serialize(db_rider)
+        rider_data.pop("ID_number", None)
+        rider_data.pop("account_details", None)
+        return {"exists": True, "missing_fields": missing_fields, "data": rider_data}
 
     raise HTTPException(status_code=400, detail="Invalid app_type")
 

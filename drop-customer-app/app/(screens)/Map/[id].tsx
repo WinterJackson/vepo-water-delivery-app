@@ -976,10 +976,11 @@ const initialRegion: import("@/types/models").MapRegion = {
 											ref={mapRef}
 											// 🟢 FREE OPEN SOURCE MVP MODE 
 											// Uncomment this block for MVP:
-											provider={undefined}
+											// provider={undefined}
 											// 🔴 PRODUCTION GOOGLE MAPS MODE 
 											// Uncomment this block for Production:
-											// provider={PROVIDER_GOOGLE}
+											provider={PROVIDER_GOOGLE}
+                                            mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
 											style={StyleSheet.absoluteFill}
 											onRegionChangeComplete={(region: import("@/types/models").MapRegion) => {
 												setRegion(region);
@@ -990,7 +991,6 @@ const initialRegion: import("@/types/models").MapRegion = {
 												}
 											}}
 											initialRegion={initialRegion}
-											customMapStyle={darkTheme ? darkMapStyle: standardMapStyle}
 											userLocationUpdateInterval={3000}
 											showsUserLocation={true}
 											showsMyLocationButton={false}
@@ -998,8 +998,7 @@ const initialRegion: import("@/types/models").MapRegion = {
 										>
 											{/* 🟢 FREE OPEN SOURCE MVP MODE */}
 											{/* Uncomment this block for MVP: */}
-											{UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
-
+											{/* {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />} */}
 											{
 												markers.map((item: import("@/types/models").GeoJSONFeature) => 
 													item.properties.cluster

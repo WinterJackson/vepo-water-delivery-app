@@ -15,6 +15,7 @@ import * as AuthSession from "expo-auth-session";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { Link, useRouter, useFocusEffect, Redirect } from "expo-router";
+import * as Linking from "expo-linking";
 import React, {
     useCallback,
     useContext,
@@ -42,17 +43,12 @@ const { width, height } = Dimensions.get("window");
 export default function SignIn() {
 	// <-----------------------<HOOKES>------------------------>
 	const { signIn, setActive, isLoaded } = useSignIn();
-	const { getToken, isSignedIn } = useAuth()
+	const { getToken, isSignedIn, signOut } = useAuth()
 	const router = useRouter();
 	const { startSSOFlow } = useSSO();
 	const { currentTheme } = useContext(UIThemeContext);
 
 	const darkTheme = currentTheme === "dark";
-
-	if (isLoaded && isSignedIn) {
-		return <Redirect href="/" />;
-	}
-
 
 	// <-----------------------<STATES>------------------------>
 	const [emailAddress, setEmailAddress] = useState("");
@@ -117,12 +113,8 @@ export default function SignIn() {
 				await startSSOFlow({
 					strategy: "oauth_google",
 					// For web, defaults to current path
-					// For native, you must pass a scheme, like AuthSession.makeRedirectUri({ scheme, path })
-					// For more info, see https://docs.expo.dev/versions/latest/sdk/auth-session/#authsessionmakeredirecturioptions
-					redirectUrl: AuthSession.makeRedirectUri({
-						scheme: "drop-vendor",
-						path: "(Auth)/sign-in/screen",
-					}),
+					// For native, you must pass a scheme
+					redirectUrl: Linking.createURL('/(Auth)/sign-in/screen', { scheme: 'drop-vendor' }),
 				});
 
 			// If sign in was successful, set the active session
@@ -143,12 +135,25 @@ export default function SignIn() {
 				router.replace("/");
 				return;
 			}
+			
+			// Handle stale cache "signed out" error from Clerk
+			if (err?.errors?.[0]?.code === "signed_out" || err?.errors?.[0]?.message === "Signed out" || (err as Error)?.message?.includes("You are signed out")) {
+				if (__DEV__) console.log("OAuth: Stale session detected. Clearing Clerk cache...");
+				await signOut();
+				success = false;
+				return;
+			}
+
 			if (__DEV__) console.error("OAuth sign-in error:", err);
 			success = false
 		} finally {
 			setAuthLoading(false);
 		}
-	}, []);
+	}, [startSSOFlow, router, signOut]);
+
+	if (isLoaded && isSignedIn) {
+		return <Redirect href="/" />;
+	}
 
 	return (
 		<>

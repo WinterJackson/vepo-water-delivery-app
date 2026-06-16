@@ -75,13 +75,13 @@ export default function ScreensLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="TripRadar" />
           <Stack.Screen name="ActiveDelivery" />
-          <Stack.Screen name="VendorRemittance" />
           <Stack.Screen name="Profile" />
           
           {/* General Pages (Slide) */}
           <Stack.Screen name="Orders" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Earnings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Cashout" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Transactions" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Notifications" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="SettingsMain" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="EarningsHistory" options={{ animation: 'slide_from_right' }} />
@@ -134,12 +134,7 @@ export default function ScreensLayout() {
               </PressableScale>
             )}
             
-            {/* Vendor Remittance */}
-            <PressableScale onPress={() => router.push("/(screens)/VendorRemittance")}>
-              <View className={`w-14 h-14 items-center justify-center ${active("/VendorRemittance") ? "bg-primary-container rounded-full" : ""}`}>
-                <TabIcon name="shift" active={active("/VendorRemittance")} />
-              </View>
-            </PressableScale>
+
 
             {/* Profile */}
             <PressableScale onPress={() => router.push("/(screens)/Profile")}>

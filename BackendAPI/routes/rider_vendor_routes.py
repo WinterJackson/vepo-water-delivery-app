@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.dependencies import get_db
-from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_rider
 from services.deliverer_service import get_deliverer_by_clerk_id
 from models.vendor_rider_model import VendorRiderRegistry
 from models.vendor_model import Vendor
@@ -19,7 +20,13 @@ class ApplyRequest(BaseModel):
     vendor_id: str
 
 @router.get("/discover-vendors")
-async def discover_nearby_vendors(lat: float, lng: float, session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def discover_nearby_vendors(
+    lat: float, 
+    lng: float, 
+    search_query: Optional[str] = Query(None),
+    session: AsyncSession = Depends(get_db), 
+    user = Depends(get_current_rider)
+):
     clerk_id = user["sub"]
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
@@ -37,10 +44,24 @@ async def discover_nearby_vendors(lat: float, lng: float, session: AsyncSession 
     if deliverer.employer_vendor_id:
         registered_vendor_ids.append(deliverer.employer_vendor_id)
 
-    # Find closest 20 vendors
+    # Find closest 20 vendors using H3 pruning (max 15km bounds for wholesale)
+    import h3
+    center_h3 = h3.latlng_to_cell(lat, lng, 8)
+    neighbor_cells = [str(cell) for cell in h3.grid_disk(center_h3, 32)]
+    
     query = select(Vendor, ST_Distance(Vendor.location, point).label("distance")).where(
-        Vendor.id.notin_(registered_vendor_ids) if registered_vendor_ids else True
-    ).order_by(
+        Vendor.h3_index_res8.in_(neighbor_cells)
+    )
+    
+    if registered_vendor_ids:
+        query = query.where(Vendor.id.notin_(registered_vendor_ids))
+        
+    if search_query and search_query.strip():
+        search_term = search_query.strip()
+        tsquery = func.websearch_to_tsquery('english', search_term)
+        query = query.where(Vendor.search_vector.op("@@")(tsquery))
+        
+    query = query.order_by(
         ST_Distance(Vendor.location, point)
     ).limit(20)
 
@@ -64,7 +85,11 @@ async def discover_nearby_vendors(lat: float, lng: float, session: AsyncSession 
     return vendors
 
 @router.get("/registered-vendors")
-async def get_registered_vendors(session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def get_registered_vendors(
+    search_query: Optional[str] = Query(None),
+    session: AsyncSession = Depends(get_db), 
+    user = Depends(get_current_rider)
+):
     clerk_id = user["sub"]
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
@@ -73,7 +98,14 @@ async def get_registered_vendors(session: AsyncSession = Depends(get_db), user =
     # Join VendorRiderRegistry with Vendor
     query = select(VendorRiderRegistry, Vendor).join(Vendor, Vendor.id == VendorRiderRegistry.vendor_id).where(
         VendorRiderRegistry.rider_id == deliverer.id
-    ).order_by(VendorRiderRegistry.requested_at.desc())
+    )
+    
+    if search_query and search_query.strip():
+        search_term = search_query.strip()
+        tsquery = func.websearch_to_tsquery('english', search_term)
+        query = query.where(Vendor.search_vector.op("@@")(tsquery))
+        
+    query = query.order_by(VendorRiderRegistry.requested_at.desc())
     
     result = await session.execute(query)
     
@@ -109,7 +141,7 @@ async def get_registered_vendors(session: AsyncSession = Depends(get_db), user =
     return registered
 
 @router.delete("/vendor-application/{vendor_id}")
-async def withdraw_vendor_application(vendor_id: str, session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def withdraw_vendor_application(vendor_id: str, session: AsyncSession = Depends(get_db), user = Depends(get_current_rider)):
     clerk_id = user["sub"]
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
@@ -138,7 +170,7 @@ async def withdraw_vendor_application(vendor_id: str, session: AsyncSession = De
     return {"message": "Application withdrawn successfully"}
 
 @router.post("/apply-vendor")
-async def apply_to_vendor(request: ApplyRequest, session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def apply_to_vendor(request: ApplyRequest, session: AsyncSession = Depends(get_db), user = Depends(get_current_rider)):
     clerk_id = user["sub"]
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
@@ -161,8 +193,10 @@ async def apply_to_vendor(request: ApplyRequest, session: AsyncSession = Depends
         a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
         distance_km = 2 * math.asin(math.sqrt(a)) * 6371
         
-        if distance_km > DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM:
-            raise HTTPException(status_code=400, detail=f"Vendor is too far. Registration is limited to {DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM}km from your Operation Base.")
+        max_distance = DispatchPolicy.WHOLESALE_RIDER_REGISTRATION_MAX_RADIUS_KM if vendor.vendor_type == "wholesale_b2b" else DispatchPolicy.RETAIL_RIDER_REGISTRATION_MAX_RADIUS_KM
+        
+        if distance_km > max_distance:
+            raise HTTPException(status_code=400, detail=f"Vendor is too far. Registration is limited to {max_distance}km for this vendor type.")
     else:
         raise HTTPException(status_code=400, detail="Operation base not set. Please set your Operation Base in Settings first.")
 

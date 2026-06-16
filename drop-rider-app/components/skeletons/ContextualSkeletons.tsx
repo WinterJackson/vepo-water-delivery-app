@@ -384,26 +384,48 @@ export function RiderProfileSkeleton() {
     const isDark = currentTheme === 'dark';
 
     return (
-        <View className="px-5 pt-6 pb-8 w-full">
+        <View className="pt-6 pb-8 w-full">
+            {/* Avatar Section */}
             <View className="items-center mb-8">
-                <Skeleton width={96} height={96} borderRadius={48} className="mb-4" />
-                <SkeletonText width={120} className="mb-2" />
-                <SkeletonText width={160} className="mb-1" />
-                <SkeletonText width={100} />
+                {/* 96px avatar + 6px border/padding = 102px footprint */}
+                <Skeleton width={102} height={102} borderRadius={51} className="mb-4" />
+                <Skeleton width={140} height={28} borderRadius={8} className="mb-2" />
+                <Skeleton width={180} height={18} borderRadius={4} className="mb-1" />
+                <Skeleton width={120} height={14} borderRadius={4} />
             </View>
 
+            {/* Profile Details Header */}
             <View className="flex-row justify-between items-center mb-2 px-1">
-                <Skeleton width={100} height={20} borderRadius={4} />
-                <Skeleton width={60} height={28} borderRadius={14} />
+                <Skeleton width={120} height={24} borderRadius={6} />
+                <Skeleton width={64} height={32} borderRadius={16} />
             </View>
 
-            <View className={`rounded-2xl p-4`} style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight }}>
+            {/* Profile Details Form Box */}
+            <View className={`rounded-2xl p-4`} style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#ffffff' }}>
                 {[1, 2, 3, 4, 5].map((i, idx) => (
-                    <View key={i} className={`flex-row justify-between py-3`} style={{ borderBottomWidth: idx < 4 ? 1 : 0, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
-                        <SkeletonText width={60} />
-                        <SkeletonText width={100} />
+                    <View key={i} className={`flex-row justify-between py-3`} style={{ borderBottomWidth: idx < 4 ? 1 : 0, borderColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6' }}>
+                        <Skeleton width={60} height={16} borderRadius={4} className="mt-3" />
+                        <Skeleton width={120} height={20} borderRadius={4} className="mt-2" />
                     </View>
                 ))}
+            </View>
+
+            {/* Vendor Network Section */}
+            <View className="mt-8 mb-4">
+                <Skeleton width={130} height={22} borderRadius={4} className="mb-3 ml-1" />
+                <View className={`rounded-2xl p-4 flex-row items-center border`} style={{ backgroundColor: isDark ? BRAND.bgDark : '#ffffff', borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
+                    <Skeleton width={50} height={50} borderRadius={25} className="mr-4" />
+                    <View className="flex-1">
+                        <Skeleton width={140} height={20} borderRadius={4} />
+                        <Skeleton width={180} height={14} borderRadius={4} className="mt-1" />
+                    </View>
+                    <Skeleton width={24} height={24} borderRadius={12} />
+                </View>
+            </View>
+
+            {/* Sign Out Button */}
+            <View className="mt-6">
+                <Skeleton width="100%" height={56} borderRadius={16} />
             </View>
         </View>
     );

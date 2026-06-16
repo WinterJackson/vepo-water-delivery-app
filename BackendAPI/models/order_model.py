@@ -59,7 +59,9 @@ class Order(Base):
   payload_surcharge = Column(Numeric(10, 2), nullable=False, default=0.0)
 
   customer_note = Column(Text, nullable=True)
+  actual_floor_level = Column(Integer, nullable=True)
   proof_url = Column(String, nullable=True)
+  cancellation_reason = Column(String, nullable=True)
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
   updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
   

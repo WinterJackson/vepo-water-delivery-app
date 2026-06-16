@@ -6,12 +6,13 @@ import {
     Platform,
     StatusBar,
     Text,
-    View
+    View,
+    TextInput
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import PressableScale from "@/components/ui/PressableScale";
 import { Ionicons } from "@expo/vector-icons";
-import { BRAND } from "@/constants/brandColors";
+import { BRAND, TOAST } from "@/constants/brandColors";
 import { VendorMapBottomSkeleton } from "@/components/skeletons/ContextualSkeletons";
 import * as Haptics from "expo-haptics";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
@@ -22,10 +23,13 @@ import { useVendorProfile, useUpdateVendorProfile } from "@/hooks/queries/useVen
 import { useVendorOrders } from "@/hooks/queries/useVendorOrders";
 import { useQueryClient } from "@tanstack/react-query";
 import { DataFallbackUI } from "@/components/ui/DataFallbackUI";
+import BottomSheet, { BottomSheetScrollView, BottomSheetView } from "@gorhom/bottom-sheet";
+import { ScrollView } from "react-native-gesture-handler";
 
 let MapView: any = null;
 let Marker: any = null;
 let Circle: any = null;
+let Polyline: any = null;
 let UrlTile: any = null;
 let PROVIDER_GOOGLE: string | null = null;
 
@@ -36,6 +40,7 @@ if (Platform.OS !== "web") {
         MapView = maps.default;
         Marker = maps.Marker;
         Circle = maps.Circle;
+        Polyline = maps.Polyline;
         UrlTile = maps.UrlTile;
         PROVIDER_GOOGLE = maps.PROVIDER_GOOGLE;
     } catch {
@@ -58,9 +63,22 @@ export default function MyMap() {
     const [currentLocation, setCurrentLocation] = useState<any>(null);
     const [deviceLocationLoading, setDeviceLocationLoading] = useState(true);
     const mapRef = useRef<any>(null);
+    const bottomSheetRef = useRef<BottomSheet>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
-    const { connected } = useWebSocket('vendor', vendorProfile?.id || '', () => {
-        queryClient.invalidateQueries({ queryKey: ['vendorOrders'] });
+    // Track live rider coordinates independently of the orders payload
+    const [riderLocations, setRiderLocations] = useState<Record<string, {lat: number, lng: number}>>({});
+
+    const { connected } = useWebSocket('vendor', vendorProfile?.id || '', (data) => {
+        if (data.action === "RIDER_LOCATION" && data.rider_id && data.location) {
+            setRiderLocations(prev => ({
+                ...prev,
+                [data.rider_id as string]: data.location as {lat: number, lng: number}
+            }));
+        } else {
+            queryClient.invalidateQueries({ queryKey: ['vendorOrders'] });
+        }
     });
 
     const loading = isProfileLoading || isOrdersLoading || deviceLocationLoading;
@@ -129,9 +147,50 @@ export default function MyMap() {
 
     const radiusMeters = currentDisplayRadius * 1000;
 
-    const activeOrders = useMemo(() => orders.filter(
-        (o: any) => ["pending", "accepted", "ready", "picked_up", "in_transit"].includes(o.order_status)
-    ), [orders]);
+    const activeOrders = useMemo(() => {
+        let filtered = orders.filter(
+            (o: any) => ["pending", "accepted", "ready", "picked_up", "in_transit"].includes(o.order_status)
+        );
+        if (debouncedSearchQuery) {
+            const lowerQuery = debouncedSearchQuery.toLowerCase();
+            filtered = filtered.filter((o: any) => 
+                (o.id && o.id.toLowerCase().includes(lowerQuery)) ||
+                (o.user?.name && o.user.name.toLowerCase().includes(lowerQuery)) ||
+                (o.deliverer?.name && o.deliverer.name.toLowerCase().includes(lowerQuery))
+            );
+        }
+        return filtered;
+    }, [orders, debouncedSearchQuery]);
+
+    // Effect to handle Search debounce and Camera Snapping
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedSearchQuery(searchQuery);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (debouncedSearchQuery && activeOrders.length === 1 && mapRef.current) {
+            const target = activeOrders[0];
+            let targetLat = target.lat;
+            let targetLng = target.lng;
+            const riderId = target.deliverer?.id;
+            if (riderId && riderLocations[riderId]) {
+                targetLat = riderLocations[riderId].lat;
+                targetLng = riderLocations[riderId].lng;
+            }
+            if (targetLat && targetLng) {
+                mapRef.current.animateCamera({
+                    center: { latitude: Number(targetLat), longitude: Number(targetLng) },
+                    pitch: 0,
+                    heading: 0,
+                    zoom: 15,
+                }, { duration: 800 });
+                bottomSheetRef.current?.snapToIndex(1);
+            }
+        }
+    }, [debouncedSearchQuery, activeOrders.length]);
 
     const deliveredOrders = useMemo(() => orders.filter(
         (o: any) => o.order_status === "delivered"
@@ -142,6 +201,123 @@ export default function MyMap() {
         picked_up: "#06b6d4", in_transit: "#0ea5e9", delivered: "#22c55e",
     };
 
+    const mapOverlays = useMemo(() => {
+        if (!Marker || !Circle) return null;
+        
+        const overlays = [];
+        
+        if (vendorProfile?.lat && vendorProfile?.lng) {
+            overlays.push(
+                // @ts-ignore
+                <Marker
+                    key="vendor-store-location"
+                    coordinate={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
+                    title={vendorProfile.business_name || "My Store"}
+                    description={vendorProfile.location_address || "Store location"}
+                    pinColor="blue"
+                />
+            );
+            overlays.push(
+                // @ts-ignore
+                <Circle
+                    key="vendor-delivery-radius"
+                    center={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
+                    radius={radiusMeters}
+                    strokeWidth={2}
+                    strokeColor="rgba(14, 165, 233, 0.6)"
+                    fillColor="rgba(14, 165, 233, 0.08)"
+                />
+            );
+        }
+
+        activeOrders.forEach((order: any, idx: number) => {
+            if (order.lat && order.lng) {
+                overlays.push(
+                    // @ts-ignore
+                    <Marker
+                        key={`active-${order.id || idx}`}
+                        coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}
+                        title={`Drop-off #${order.id?.substring(0, 8)}`}
+                        description={`${order.order_status} · KSH ${order.total_amount}`}
+                        pinColor={STATUS_COLORS[order.order_status] || "red"}
+                    />
+                );
+
+                // If the rider is assigned and we have their location, draw a polyline and rider marker
+                const riderId = order.deliverer?.id;
+                let rLat = null;
+                let rLng = null;
+
+                // Priority: Live WebSocket location > DB last known location
+                if (riderId && riderLocations[riderId]) {
+                    rLat = riderLocations[riderId].lat;
+                    rLng = riderLocations[riderId].lng;
+                } else if (order.deliverer?.current_lat && order.deliverer?.current_lng) {
+                    rLat = order.deliverer.current_lat;
+                    rLng = order.deliverer.current_lng;
+                }
+
+                if (rLat && rLng) {
+                    // Draw Polyline: Vendor -> Rider -> Customer
+                    if (Polyline && vendorProfile?.lat && vendorProfile?.lng) {
+                        overlays.push(
+                            // @ts-ignore
+                            <Polyline
+                                key={`poly-${order.id || idx}`}
+                                coordinates={[
+                                    { latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) },
+                                    { latitude: Number(rLat), longitude: Number(rLng) },
+                                    { latitude: Number(order.lat), longitude: Number(order.lng) }
+                                ]}
+                                strokeColor={STATUS_COLORS[order.order_status] || BRAND.primary}
+                                strokeWidth={2}
+                                lineDashPattern={[5, 5]}
+                            />
+                        );
+                    }
+
+                    // Draw Rider Marker
+                    overlays.push(
+                        // @ts-ignore
+                        <Marker
+                            key={`rider-${riderId}-${order.id}`}
+                            coordinate={{ latitude: Number(rLat), longitude: Number(rLng) }}
+                            title={`Rider: ${order.deliverer?.name || 'Dispatch'}`}
+                            description={`Status: ${order.order_status}`}
+                            pinColor="yellow"
+                            zIndex={999}
+                        >
+                            <View className="bg-white p-1 rounded-full shadow-lg border border-gray-200">
+                                <View className="bg-[#f59e0b] w-6 h-6 rounded-full items-center justify-center">
+                                    <Ionicons name="bicycle" size={14} color="white" />
+                                </View>
+                            </View>
+                        </Marker>
+                    );
+                }
+            }
+        });
+
+        deliveredOrders.forEach((order: any, idx: number) => {
+            if (order.lat && order.lng) {
+                overlays.push(
+                    // @ts-ignore
+                    <Marker
+                        key={`delivered-${order.id || idx}`}
+                        coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}
+                        title={`Delivered #${order.id?.substring(0, 8)}`}
+                        description={`KSH ${order.total_amount}`}
+                        pinColor="green"
+                        opacity={0.5}
+                    />
+                );
+            }
+        });
+
+        return overlays;
+    }, [vendorProfile?.lat, vendorProfile?.lng, vendorProfile?.business_name, vendorProfile?.location_address, radiusMeters, activeOrders, deliveredOrders, riderLocations]);
+
+
     const handleZoom = async (zoomIn: boolean) => {
         if (!mapRef.current || Platform.OS === 'web') return;
         try {
@@ -151,6 +327,16 @@ export default function MyMap() {
                 zoom: Math.max(1, Math.min(20, (camera.zoom || 15) + (zoomIn ? 1 : -1))),
             }, { duration: 250 });
         } catch {}
+    };
+
+    const handleSnapToRider = (lat: number, lng: number) => {
+        if (!mapRef.current) return;
+        mapRef.current.animateCamera({
+            center: { latitude: Number(lat), longitude: Number(lng) },
+            zoom: 16
+        }, { duration: 500 });
+        // Optionally collapse bottom sheet
+        bottomSheetRef.current?.collapse();
     };
 
     useEffect(() => {
@@ -182,7 +368,8 @@ export default function MyMap() {
                     // @ts-ignore
                     <MapView
                         ref={mapRef}
-                        provider={undefined}
+                        provider={PROVIDER_GOOGLE}
+                        mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
                         style={{ flex: 1 }}
                         initialRegion={{
                             latitude: NAIROBI.latitude,
@@ -192,9 +379,8 @@ export default function MyMap() {
                         }}
                         showsUserLocation={true}
                         showsMyLocationButton={false}
-                        customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
                     >
-                        {UrlTile && (
+                        {/* {UrlTile && (
                             // @ts-ignore
                             <UrlTile
                                 urlTemplate={darkTheme
@@ -202,51 +388,8 @@ export default function MyMap() {
                                     : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"}
                                 maximumZ={20}
                             />
-                        )}
-                        {vendorProfile?.lat && vendorProfile?.lng && (
-                            // @ts-ignore
-                            <Marker
-                                coordinate={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
-                                title={vendorProfile.business_name || "My Store"}
-                                description={vendorProfile.location_address || "Store location"}
-                                pinColor="blue"
-                            />
-                        )}
-                        {vendorProfile?.lat && vendorProfile?.lng && Circle && (
-                            // @ts-ignore
-                            <Circle
-                                center={{ latitude: Number(vendorProfile.lat), longitude: Number(vendorProfile.lng) }}
-                                radius={radiusMeters}
-                                strokeWidth={2}
-                                strokeColor="rgba(14, 165, 233, 0.6)"
-                                fillColor="rgba(14, 165, 233, 0.08)"
-                            />
-                        )}
-                        {activeOrders.map((order: any, idx: number) =>
-                            order.lat && order.lng ? (
-                                // @ts-ignore
-                                <Marker
-                                    key={`active-${order.id || idx}`}
-                                    coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}
-                                    title={`Order #${order.id?.substring(0, 8)}`}
-                                    description={`${order.order_status} · KSH ${order.total_amount}`}
-                                    pinColor={STATUS_COLORS[order.order_status] || "red"}
-                                />
-                            ) : null
-                        )}
-                        {deliveredOrders.map((order: any, idx: number) =>
-                            order.lat && order.lng ? (
-                                // @ts-ignore
-                                <Marker
-                                    key={`delivered-${order.id || idx}`}
-                                    coordinate={{ latitude: Number(order.lat), longitude: Number(order.lng) }}
-                                    title={`Delivered #${order.id?.substring(0, 8)}`}
-                                    description={`KSH ${order.total_amount}`}
-                                    pinColor="green"
-                                    opacity={0.5}
-                                />
-                            ) : null
-                        )}
+                        )} */}
+                        {mapOverlays}
                     </MapView>
                 ) : (
                     <View className={`flex-1 items-center justify-center ${darkTheme ? "bg-[#121212]" : "bg-slate-100"}`}>
@@ -259,12 +402,19 @@ export default function MyMap() {
                 )}
                 <SafeAreaView edges={["top"]} className="absolute w-full" pointerEvents="box-none">
                     <View className="px-4 pt-3 flex-row items-center justify-between" pointerEvents="box-none">
-                        <View className="flex-row items-center" pointerEvents="box-none">
-                            <PressableScale onPress={() => router.back()} className="mr-4">
+                        <View className="flex-row items-center flex-1" pointerEvents="box-none">
+                            <PressableScale onPress={() => router.back()} className="mr-3 pointer-events-auto">
                                 <BackButtonMinimal />
                             </PressableScale>
-                            <View className={`px-5 py-3 rounded-[32px] border ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} style={shadowStyle}>
-                                <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Live Map</Text>
+                            <View className={`flex-1 mr-3 flex-row items-center px-4 py-3 rounded-full border pointer-events-auto ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} style={shadowStyle}>
+                                <Ionicons name="search" size={20} color={darkTheme ? "#89929b" : "#94a3b8"} className="mr-2" />
+                                <TextInput
+                                    placeholder="Search order ID, rider, or customer"
+                                    placeholderTextColor={darkTheme ? "#89929b" : "#94a3b8"}
+                                    value={searchQuery}
+                                    onChangeText={setSearchQuery}
+                                    style={{ color: darkTheme ? "#fff" : "#0f172a", flex: 1, fontSize: 16 }}
+                                />
                             </View>
                         </View>
                         <View className="flex-row items-center gap-2 pointer-events-auto">
@@ -314,8 +464,8 @@ export default function MyMap() {
                                             {currentDisplayRadius}<Text className="text-sm font-bold">km</Text>
                                         </Text>
                                     </View>
-                                    <PressableScale onPress={() => handleUpdateRadius(1)} className="w-12 h-12 rounded-full bg-[#10b981]/10 items-center justify-center border border-[#10b981]/20">
-                                        <Ionicons name="add" size={24} color="#10b981" />
+                                    <PressableScale onPress={() => handleUpdateRadius(1)} className="w-12 h-12 rounded-full bg-green-500/10 items-center justify-center border border-green-500/20">
+                                        <Ionicons name="add" size={24} color={TOAST.success} />
                                     </PressableScale>
                                 </View>
                             </View>
@@ -329,8 +479,8 @@ export default function MyMap() {
                                 <Text className={`text-xs font-bold mt-1 tracking-wide uppercase ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Active Orders</Text>
                             </View>
                             <View className={`flex-1 rounded-[24px] p-5 border ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-gray-100"}`} style={shadowStyle}>
-                                <View className={`w-10 h-10 rounded-full items-center justify-center mb-3 ${darkTheme ? "bg-[#10b981]/20" : "bg-[#10b981]/10"}`}>
-                                    <Ionicons name="checkmark-circle-outline" size={20} color="#10b981" />
+                                <View className={`w-10 h-10 rounded-full items-center justify-center mb-3 ${darkTheme ? "bg-green-500/20" : "bg-green-500/10"}`}>
+                                    <Ionicons name="checkmark-circle-outline" size={20} color={TOAST.success} />
                                 </View>
                                 <Text className={`text-3xl font-black ${darkTheme ? "text-white" : "text-slate-900"}`}>{deliveredOrders.length}</Text>
                                 <Text className={`text-xs font-bold mt-1 tracking-wide uppercase ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Delivered</Text>
@@ -339,6 +489,93 @@ export default function MyMap() {
                     </>
                 )}
             </View>
+
+            {/* Bottom Sheet for Active Dispatches */}
+            <BottomSheet
+                ref={bottomSheetRef}
+                index={0}
+                snapPoints={['20%', '50%', '85%']}
+                backgroundStyle={{ backgroundColor: darkTheme ? '#1e293b' : '#ffffff' }}
+                handleIndicatorStyle={{ backgroundColor: darkTheme ? '#cbd5e1' : '#cbd5e1', width: 40 }}
+            >
+                <BottomSheetView style={{ flex: 1 }}>
+                    <View className="px-6 pt-2 pb-4 flex-row items-center justify-between border-b border-gray-100 dark:border-gray-800">
+                        <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
+                            Active Dispatches
+                        </Text>
+                        <View className={`px-2 py-1 rounded-full ${activeOrders.length > 0 ? "bg-amber-100" : "bg-gray-100"}`}>
+                            <Text className={`text-xs font-semibold ${activeOrders.length > 0 ? "text-amber-700" : "text-gray-500"}`}>
+                                {activeOrders.length} Riders
+                            </Text>
+                        </View>
+                    </View>
+
+                    <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 }}>
+                        {activeOrders.length === 0 ? (
+                            <View className="items-center justify-center py-10">
+                                <Ionicons name="bicycle-outline" size={48} color={darkTheme ? "#475569" : "#cbd5e1"} />
+                                <Text className={`mt-4 text-center ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                    No active riders currently on the road.
+                                </Text>
+                            </View>
+                        ) : (
+                            activeOrders.map((order: any, idx: number) => {
+                                const riderId = order.deliverer?.id;
+                                let rLat = null;
+                                let rLng = null;
+
+                                if (riderId && riderLocations[riderId]) {
+                                    rLat = riderLocations[riderId].lat;
+                                    rLng = riderLocations[riderId].lng;
+                                } else if (order.deliverer?.current_lat && order.deliverer?.current_lng) {
+                                    rLat = order.deliverer.current_lat;
+                                    rLng = order.deliverer.current_lng;
+                                }
+
+                                const hasLocation = !!(rLat && rLng);
+
+                                return (
+                                    <PressableScale 
+                                        key={`dispatch-${order.id || idx}`}
+                                        onPress={() => {
+                                            if (hasLocation) handleSnapToRider(rLat, rLng);
+                                            else Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                                        }}
+                                        disabled={!hasLocation}
+                                    >
+                                        <View className={`flex-row items-center p-4 mb-3 rounded-2xl border ${darkTheme ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"} shadow-sm`}>
+                                            <View className={`w-12 h-12 rounded-full items-center justify-center ${darkTheme ? "bg-gray-700" : "bg-blue-50"}`}>
+                                                <Ionicons name="person" size={20} color={BRAND.primary} />
+                                                {connected && hasLocation && (
+                                                    <View className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white" />
+                                                )}
+                                            </View>
+                                            <View className="flex-1 ml-4">
+                                                <Text className={`font-semibold text-base ${darkTheme ? "text-white" : "text-gray-900"}`} numberOfLines={1}>
+                                                    {order.deliverer?.name || 'Waiting for Rider'}
+                                                </Text>
+                                                <Text className={`text-sm mt-1 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                                    Order #{order.id?.substring(0, 8)}
+                                                </Text>
+                                            </View>
+                                            <View className="items-end">
+                                                <View className={`px-2 py-1 rounded-md bg-[${STATUS_COLORS[order.order_status] || '#ccc'}20]`}>
+                                                    <Text style={{ color: STATUS_COLORS[order.order_status] || '#ccc', fontSize: 12, fontWeight: '600' }}>
+                                                        {order.order_status.toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                                {!hasLocation && order.deliverer && (
+                                                    <Text className="text-[10px] text-gray-400 mt-1">No GPS Signal</Text>
+                                                )}
+                                            </View>
+                                        </View>
+                                    </PressableScale>
+                                );
+                            })
+                        )}
+                    </BottomSheetScrollView>
+                </BottomSheetView>
+            </BottomSheet>
         </View>
     );
 }

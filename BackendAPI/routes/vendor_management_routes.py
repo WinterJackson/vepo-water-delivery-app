@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.dependencies import get_db
 from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_vendor
 from services.vendor_management_service import (
     register_vendor,
     get_vendor_by_clerk_id,
@@ -21,6 +22,8 @@ from pydantic import BaseModel
 from uuid import UUID
 from typing import Optional, List, Literal
 from utils.serializers import safe_serialize
+from schemas.order_schema import PaginatedOrders
+
 router = APIRouter()
 
 
@@ -82,6 +85,11 @@ class OrderStatusRequest(BaseModel):
 class AssignRiderRequest(BaseModel):
     deliverer_id: str
 
+class ReceiveBottlesRequest(BaseModel):
+    rider_id: str
+    received_10L: int = 0
+    received_20L: int = 0
+
 # --- Routes ---
 
 @router.post("/register")
@@ -97,34 +105,60 @@ async def vendor_register(
 @router.get("/stores")
 async def vendor_stores(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     stores = await get_all_vendors_by_clerk_id(session=db, clerk_id=clerk_id)
-    return stores
+    return [safe_serialize(s) for s in stores]
 
 @router.put("/staff")
 async def vendor_assign_staff(
-    staff_clerk_id: str,
+    email: str,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
-    # Only the owner can assign staff to their FIRST store for now
+    # Only the owner can assign staff to their store
     vendor = await get_vendor_by_clerk_id(session=db, clerk_id=clerk_id)
     if not vendor or vendor.clerk_id != clerk_id:
         raise HTTPException(status_code=403, detail="Only the store owner can assign staff.")
     
-    vendor.staff_clerk_id = staff_clerk_id
-    await db.commit()
-    return {"message": "Staff assigned successfully."}
+    import os
+    from clerk_backend_api import Clerk
+    clerk_secret = os.getenv("CLERK_SECRET_KEY")
+    if not clerk_secret:
+        raise HTTPException(status_code=500, detail="Server misconfiguration: Clerk secret missing.")
+        
+    try:
+        clerk = Clerk(bearer_auth=clerk_secret)
+        # Assuming clerk.users.list accepts email_address as a parameter.
+        # The clerk_backend_api v2.2.0 uses 'list' for getting users
+        users_response = clerk.users.list(email_address=[email])
+        
+        # clerk_backend_api .list returns a UserList or list of Users depending on the specific API version.
+        # Let's inspect the length. If it has .data, we use that.
+        users = getattr(users_response, "data", users_response)
+        
+        if not users or len(users) == 0:
+            raise HTTPException(status_code=404, detail="Staff member not found. Please ask them to download the app and sign up first.")
+            
+        staff_clerk_id = users[0].id
+        
+        vendor.staff_clerk_id = staff_clerk_id
+        await db.commit()
+        return {"message": "Staff assigned successfully."}
+    except Exception as e:
+        logger.error(f"Failed to assign staff via Clerk: {e}")
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=400, detail="Failed to find the specified user.")
 
 
 
 @router.get("/profile")
 async def vendor_profile(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     vendor = await get_vendor_by_clerk_id(session=db, clerk_id=clerk_id)
@@ -140,7 +174,7 @@ async def vendor_profile(
 async def vendor_update_profile(
     body: VendorProfileUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     vendor = await get_vendor_by_clerk_id(session=db, clerk_id=clerk_id)
@@ -153,7 +187,20 @@ async def vendor_update_profile(
             if getattr(body, field, None) is not None:
                 raise HTTPException(status_code=403, detail="Staff members cannot update restricted store settings.")
                 
-    updated_vendor = await update_vendor_profile(session=db, clerk_id=clerk_id, data=body.model_dump(exclude_none=True))
+    from datetime import datetime
+    data = body.model_dump(exclude_none=True)
+    if "shift_start" in data and isinstance(data["shift_start"], str):
+        try:
+            data["shift_start"] = datetime.strptime(data["shift_start"], "%H:%M").time()
+        except ValueError:
+            pass # Or handle error
+    if "shift_end" in data and isinstance(data["shift_end"], str):
+        try:
+            data["shift_end"] = datetime.strptime(data["shift_end"], "%H:%M").time()
+        except ValueError:
+            pass # Or handle error
+
+    updated_vendor = await update_vendor_profile(session=db, clerk_id=clerk_id, data=data)
     return {"message": "Profile updated", "vendor_id": str(vendor.id)}
 
 
@@ -161,11 +208,31 @@ async def vendor_update_profile(
 async def vendor_create_product(
     body: ProductCreateRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     product = await create_product(session=db, clerk_id=clerk_id, data=body.model_dump())
     return {"message": "Product created", "product_id": str(product.id)}
+
+
+@router.get("/products/{product_id}")
+async def vendor_get_single_product(
+    product_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_vendor),
+):
+    """Fetch a single product by ID for the edit product flow."""
+    clerk_id = user["sub"]
+    vendor = await get_vendor_by_clerk_id(session=db, clerk_id=clerk_id)
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    from models.product_model import Product
+    product = await db.get(Product, product_id)
+    if not product or product.vendor_id != vendor.id:
+        raise HTTPException(status_code=404, detail="Product not found or does not belong to this vendor")
+
+    return safe_serialize(product)
 
 
 @router.put("/products/{product_id}")
@@ -173,7 +240,7 @@ async def vendor_update_product(
     product_id: UUID,
     body: ProductUpdateRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     product = await update_product(session=db, clerk_id=clerk_id, product_id=product_id, data=body.model_dump(exclude_none=True))
@@ -184,10 +251,28 @@ async def vendor_update_product(
 async def vendor_delete_product(
     product_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
-    result = await delete_product(session=db, clerk_id=clerk_id, product_id=product_id)
+    await delete_product(session=db, clerk_id=clerk_id, product_id=product_id)
+    return {"message": "Product deleted"}
+
+
+@router.post("/receive-bottles")
+async def vendor_receive_bottles(
+    body: ReceiveBottlesRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_vendor),
+):
+    from services.vendor_management_service import receive_bottles_from_rider
+    clerk_id = user["sub"]
+    result = await receive_bottles_from_rider(
+        session=db, 
+        clerk_id=clerk_id, 
+        rider_id=body.rider_id, 
+        received_10L=body.received_10L, 
+        received_20L=body.received_20L
+    )
     return result
 
 
@@ -198,9 +283,16 @@ async def vendor_get_products(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
+    
+    from core.redis_client import cache_get, cache_set
+    cache_key = f"vendor_products:{clerk_id}:{search_query}:{stock_filter}:{limit}:{offset}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
     products = await get_vendor_products(
         session=db, 
         clerk_id=clerk_id, 
@@ -209,17 +301,20 @@ async def vendor_get_products(
         limit=limit, 
         offset=offset
     )
-    return {"pages": [products]}
+    
+    result = {"pages": [products]}
+    await cache_set(cache_key, result, ttl_seconds=60) # Cache for 60 seconds
+    return result
 
 
-@router.get("/orders")
+@router.get("/orders", response_model=PaginatedOrders)
 async def vendor_get_orders(
     search_query: Optional[str] = Query(None, description="Search query for order ID"),
     status_filter: str = Query("All", description="Filter by status: All, pending, accepted, preparing, ready, cancelled"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     orders = await get_vendor_orders(
@@ -238,7 +333,7 @@ async def vendor_update_order_status(
     order_id: UUID,
     body: OrderStatusRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     result = await update_order_status(session=db, clerk_id=clerk_id, order_id=order_id, new_status=body.status)
@@ -248,7 +343,7 @@ async def vendor_update_order_status(
 @router.get("/dashboard")
 async def vendor_dashboard(
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     clerk_id = user["sub"]
     return await get_vendor_dashboard(session=db, clerk_id=clerk_id)
@@ -258,7 +353,7 @@ async def vendor_dashboard(
 async def vendor_cancel_order(
     order_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     """Cancel an order before preparation"""
     clerk_id = user["sub"]
@@ -270,7 +365,7 @@ async def vendor_assign_rider(
     order_id: UUID,
     body: AssignRiderRequest,
     db: AsyncSession = Depends(get_db),
-    user=Depends(get_current_user),
+    user=Depends(get_current_vendor),
 ):
     """Assign an order to a specific rider"""
     clerk_id = user["sub"]

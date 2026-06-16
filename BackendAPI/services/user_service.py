@@ -6,6 +6,7 @@ from schemas.vendor_schemas import RequestBodyCoordinates
 from geoalchemy2.shape import from_shape
 from shapely.geometry import Point
 from schemas.user_schemas import BasicUser
+import h3
 
 
 
@@ -27,6 +28,7 @@ async def update_user_location(session : AsyncSession, data: RequestBodyCoordina
   user.lat = data.lat
   user.lng = data.lng
   user.location = from_shape(Point(data.lng, data.lat), srid=4326)
+  user.h3_index_res8 = str(h3.latlng_to_cell(data.lat, data.lng, 8))
   if data.location_address is not None:
       user.location_address = data.location_address
   if data.floor_level is not None:

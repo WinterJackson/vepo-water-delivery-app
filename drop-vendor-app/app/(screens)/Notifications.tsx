@@ -19,8 +19,8 @@ import { VendorNotificationItemSkeleton } from "@/components/skeletons/Contextua
 const getTypeColor = (type: string, darkTheme: boolean) => {
     switch (type) {
         case "order_update": return darkTheme ? "border-accentbg/50" : "border-accentbg";
-        case "delivery_update": return darkTheme ? "border-[#10b981]/50" : "border-[#10b981]/80";
-        case "promo": return darkTheme ? "border-[#f59e0b]/50" : "border-[#f59e0b]/80";
+        case "delivery_update": return darkTheme ? "border-green-500/50" : "border-green-500/80";
+        case "promo": return darkTheme ? "border-amber-500/50" : "border-amber-500/80";
         case "alert": return darkTheme ? "border-red-500/50" : "border-red-500/80";
         default: return darkTheme ? "border-slate-700" : "border-slate-300";
     }

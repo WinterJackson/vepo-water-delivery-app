@@ -4,9 +4,8 @@ load_dotenv()
 
 from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from dependencies.dependencies import get_db
-from utils.verify_user_token import get_current_user
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from dependencies.auth_dependencies import get_current_customer
+from core.redis_client import redis_limiter as limiter
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from services.user_service import get_user
@@ -23,7 +22,7 @@ from pydantic import BaseModel
 from services.payment_service import is_safaricom_ip
 
 logger = logging.getLogger(__name__)
-limiter = Limiter(key_func=get_remote_address)
+
 
 # order imports
 from schemas.order_schema import BaseOrder
@@ -57,7 +56,7 @@ class AddToCartRequest(BaseModel):
 
 @router.post("/add_to_cart")
 @limiter.limit("15/minute")
-async def add_to_cart(request: Request, request_body: AddToCartRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def add_to_cart(request: Request, request_body: AddToCartRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
   user_id = request_body.user_id
   if request_body.user_id == "":
@@ -78,21 +77,21 @@ class Id(BaseModel):
   id: str | UUID
 @router.get("/get_cart")
 # async def get_cart( request: Id, db: AsyncSession = Depends(get_db)):
-async def get_cart( db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def get_cart( db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
   user = await get_user(session=db, clerk_id=clerkId)
   cart = await fetch_cart(user_id=user.id, session=db)
   return cart
 
 @router.get("/get_detailed_cart", response_model=CartDetailed)
-async def get_detailed_cart(db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def get_detailed_cart(db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
   user = await get_user(session=db, clerk_id=clerkId)
   cart = await fetch_detailed_cart(user_id=user.id, session=db)
   return cart
 
 @router.post("/change_cart_item_quantity")
-async def change_cart_item_quantity(request_body: RequestBodyIdAndQuantity, db: AsyncSession= Depends(get_db), user = Depends(get_current_user)):
+async def change_cart_item_quantity(request_body: RequestBodyIdAndQuantity, db: AsyncSession= Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
   user = await get_user(session=db, clerk_id=clerkId)
   await change_cart_item_quantity_service(user_id=user.id, session=db, quantity=request_body.quantity, id=request_body.id)
@@ -101,7 +100,7 @@ async def change_cart_item_quantity(request_body: RequestBodyIdAndQuantity, db: 
   }
 
 @router.post("/delete_cart_item")
-async def delete_cart_item(request_body: RequestBodyId, db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def delete_cart_item(request_body: RequestBodyId, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
   user_obj = await get_user(session=db, clerk_id=clerkId)
   await delete_cart_item_service(cart_item_id=request_body.id, user_id=user_obj.id, session=db)
@@ -119,10 +118,11 @@ class OrderRequest(BaseModel):
     lat: float
     lng: float
     delivery_type: str = "quick_swap"
+    payment_method: str = "mpesa"
 
 @router.post("/mpesa_payment")
 @limiter.limit("5/minute")
-async def payment_request(request: Request, order: OrderRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def payment_request(request: Request, order: OrderRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
     # ── F-018 FIX: Calculate amount server-side from cart total ──────────
     from services.cart_services import fetch_detailed_cart
     from services.order_service import calculate_delivery_fee
@@ -135,6 +135,9 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
         )
 
     cart_total = float(cart.total_amount) - float(cart.welcome_discount_amount)
+    
+    user_model = None
+    
     # Get vendor coordinates for delivery fee calculation 
     if cart.cart_item:
         vendor_id = cart.cart_item[0].vendor_id
@@ -227,10 +230,10 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
         server_amount = int(cart_total)
 
     # --- Pre-flight Validation 4: Debt Intercept ---
-    if user and float(user.debt_balance) > 0:
+    if user_model and getattr(user_model, 'debt_balance', 0) and float(user_model.debt_balance) > 0:
         raise HTTPException(
             status_code=402,
-            detail=f"You have an outstanding bottle deposit debt of KSH {float(user.debt_balance):.0f}. Please clear it before placing a new order."
+            detail=f"You have an outstanding bottle deposit debt of KSH {float(user_model.debt_balance):.0f}. Please clear it before placing a new order."
         )
 
     if server_amount <= 0:
@@ -241,17 +244,49 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
     await db.commit()
 
     try:
-        response = await initiate_stk_push(phone=order.phone, amount=server_amount)
-        CheckoutRequestID = response.get("CheckoutRequestID")
-        logger.info(f"STK push initiated, CheckoutRequestID: {CheckoutRequestID}, server_amount: {server_amount}")
-        orders = await create_order(session=db, id=order.id, type="cart", CheckoutRequestID=CheckoutRequestID, user_id=order.user_id, phone=order.phone, lat=order.lat, lng=order.lng, delivery_type=order.delivery_type) 
-        if not orders:
-            raise HTTPException(status_code=400, detail="Orders not created. Something went wrong.")
-        # F-018 & RACE CONDITION FIX: Delay cart deletion until /confirm_payment or /mpesa/callback succeeds.
-        return {
-          "message": "order created",
-          "CheckoutRequestID": CheckoutRequestID
-        }
+        if order.payment_method == "cash":
+            # For Cash on Delivery, bypass STK Push and create order directly
+            logger.info(f"Cash order requested, server_amount: {server_amount}")
+            orders = await create_order(
+                session=db, id=order.id, type="cart", 
+                CheckoutRequestID=None, user_id=order.user_id, 
+                phone=order.phone, lat=order.lat, lng=order.lng, 
+                delivery_type=order.delivery_type, payment_method="cash"
+            )
+            if not orders:
+                raise HTTPException(status_code=400, detail="Orders not created. Something went wrong.")
+            
+            # Immediately delete cart for cash orders since payment is deferred
+            try:
+                from services.cart_services import delete_cart_service
+                await delete_cart_service(cart_id=str(cart.id), db=db)
+            except Exception as e:
+                logger.error(f"Failed to clear cart after cash order creation: {e}")
+
+            return {
+              "message": "order created",
+              "payment_method": "cash",
+              "CheckoutRequestID": None
+            }
+        else:
+            # M-PESA STK Push Flow
+            response = await initiate_stk_push(phone=order.phone, amount=server_amount)
+            CheckoutRequestID = response.get("CheckoutRequestID")
+            logger.info(f"STK push initiated, CheckoutRequestID: {CheckoutRequestID}, server_amount: {server_amount}")
+            orders = await create_order(
+                session=db, id=order.id, type="cart", 
+                CheckoutRequestID=CheckoutRequestID, user_id=order.user_id, 
+                phone=order.phone, lat=order.lat, lng=order.lng, 
+                delivery_type=order.delivery_type, payment_method="mpesa"
+            ) 
+            if not orders:
+                raise HTTPException(status_code=400, detail="Orders not created. Something went wrong.")
+            # F-018 & RACE CONDITION FIX: Delay cart deletion until /confirm_payment or /mpesa/callback succeeds.
+            return {
+              "message": "order created",
+              "payment_method": "mpesa",
+              "CheckoutRequestID": CheckoutRequestID
+            }
     except Exception as e:
         # Unlock the cart if STK push fails immediately
         cart.is_locked = False
@@ -262,7 +297,7 @@ class RequestCheckoutRequestID(BaseModel):
   CheckoutRequestID: str  
 @router.post("/confirm_payment")
 @limiter.limit("20/minute")
-async def payment_confirmation(request: Request, body: RequestCheckoutRequestID, db: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def payment_confirmation(request: Request, body: RequestCheckoutRequestID, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   CheckoutRequestID = body.CheckoutRequestID
   response = await check_payment(checkout_request_id=CheckoutRequestID, session=db)
   
@@ -284,7 +319,7 @@ async def get_orders_by_id(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession= Depends(get_db),
-    user = Depends(get_current_user)
+    user = Depends(get_current_customer)
 ):
   clerkId = user["sub"]
   user = await get_user(session=db, clerk_id=clerkId)
@@ -294,12 +329,23 @@ async def get_orders_by_id(
 @router.get("/orders/last-completed", response_model=BaseOrder | None)
 async def fetch_last_completed_order(
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_user)
+    user = Depends(get_current_customer)
 ):
     from services.order_service import get_last_completed_order
     clerkId = user["sub"]
     user_obj = await get_user(session=db, clerk_id=clerkId)
     order = await get_last_completed_order(session=db, user_id=user_obj.id)
+    return order
+
+@router.get("/orders/active", response_model=BaseOrder | None)
+async def fetch_active_order(
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_customer)
+):
+    from services.order_service import get_active_order
+    clerkId = user["sub"]
+    user_obj = await get_user(session=db, clerk_id=clerkId)
+    order = await get_active_order(session=db, user_id=user_obj.id)
     return order
 
 @router.post("/mpesa/callback")
@@ -346,7 +392,8 @@ async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
                 logger.error(f"M-PESA callback amount mismatch: order={order.total_amount}, callback={callback_amount}")
                 return JSONResponse(status_code=400, content={"message": "Amount mismatch"})
 
-            logger.info(f"M-PESA Payment Verified: receipt={receipt}, amount={callback_amount}, phone={callback_phone}")
+            from utils.redaction import redact_phone
+            logger.info(f"M-PESA Payment Verified: receipt={receipt}, amount={callback_amount}, phone={redact_phone(str(callback_phone))}")
 
             # --- Create Payment audit record for successful transaction ---
             from models.payment_model import Payment
@@ -429,7 +476,30 @@ async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
                 logger.error(f"Error creating failed payment record: {pay_e}")
 
     except Exception as e:
-        logger.error(f"Error processing M-PESA callback: {e}")
+        logger.error("Error processing M-PESA callback", exc_info=True)
+        try:
+            import sentry_sdk
+            from utils.redaction import redact_payload
+            raw_body = await request.body()
+            payload_str = raw_body.decode("utf-8")
+            redacted_payload = redact_payload(payload_str)
+            sentry_sdk.set_context("webhook_payload", {"raw": redacted_payload})
+            sentry_sdk.capture_exception(e)
+            
+            # DLQ: Store in database
+            from dependencies.dependencies import get_db_session
+            from models.failed_webhook_model import FailedWebhook
+            async with get_db_session() as session:
+                dlq_entry = FailedWebhook(
+                    source="mpesa",
+                    payload=redacted_payload,
+                    error_message=str(e)
+                )
+                session.add(dlq_entry)
+                await session.commit()
+                logger.info(f"Saved failed webhook to DLQ: {dlq_entry.id}")
+        except Exception as dlq_err:
+            logger.error(f"Failed to save webhook to DLQ: {dlq_err}", exc_info=True)
         return JSONResponse(status_code=400, content={"message": "Invalid payload"})
 
     return {"message": "Callback received"}
@@ -439,10 +509,22 @@ async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
 async def customer_cancel_order(
     order_id: UUID,
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_user),
+    user = Depends(get_current_customer),
 ):
     """Customer cancels their own order"""
     clerk_id = user["sub"]
     user_obj = await get_user(session=db, clerk_id=clerk_id)
     result = await cancel_customer_order(session=db, user_id=user_obj.id, order_id=order_id)
     return result
+
+@router.get("/orders/{order_id}/tracking-logs")
+async def get_order_tracking_logs(
+    order_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_customer),
+):
+    """Fetch tracking logs for an order (historical route)"""
+    from services.order_service import fetch_order_tracking_logs
+    logs = await fetch_order_tracking_logs(session=db, order_id=order_id)
+    return logs
+

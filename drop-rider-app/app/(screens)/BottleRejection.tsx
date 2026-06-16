@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { BRAND, TOAST } from "@/constants/brandColors";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function BottleRejection() {
   const { currentTheme } = useContext<any>(UIThemeContext);
@@ -22,6 +23,7 @@ export default function BottleRejection() {
   const params = useLocalSearchParams();
   const orderId = params.orderId as string;
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
 
   const [reason, setReason] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
@@ -175,7 +177,7 @@ export default function BottleRejection() {
          />
       </ScrollView>
 
-      <View className="p-5 border-t border-gray-100 dark:border-white/5">
+      <View className="p-5 border-t border-gray-100 dark:border-white/5" style={{ paddingBottom: insets.bottom + 90 }}>
         <PressableScale
           onPress={submitRejection}
           disabled={isSubmitting}

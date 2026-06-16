@@ -1,6 +1,5 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import { PressableScale } from "@/components/ui/PressableScale";
+import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { ERROR_BOUNDARY, BRAND } from '@/constants/brandColors';
 import { UIThemeContext } from '@/context/ThemeContext';
 
@@ -15,9 +14,9 @@ const ErrorFallbackUI = ({ error, resetCount, maxResets, onReset }: any) => {
         {(error as Error)?.message ?? 'An unexpected error occurred.'}
       </Text>
       {resetCount < maxResets ? (
-        <PressableScale style={styles.button} onPress={onReset}>
+        <TouchableOpacity style={styles.button} onPress={onReset} activeOpacity={0.8}>
           <Text style={styles.buttonText}>Try Again</Text>
-        </PressableScale>
+        </TouchableOpacity>
       ) : (
         <Text style={styles.crashLimit}>
           The app has crashed multiple times. Please restart the application.

@@ -1,294 +1,476 @@
-import React, { useContext, useEffect, useState, useRef, useCallback, useMemo } from "react";
-import { View, Text, ScrollView, StatusBar, TextInput } from "react-native";
+import React, { useContext, useState } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "@clerk/clerk-expo";
-import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
-import * as Haptics from "expo-haptics";
-import { BottomSheetModal, BottomSheetBackdrop, BottomSheetView } from "@gorhom/bottom-sheet";
-import { UIThemeContext } from "@/context/ThemeContext";
-import { BRAND } from "@/constants/brandColors";
-import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
-import PressableScale from "@/components/ui/PressableScale";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
-import { Toast } from '@/lib/toast';
+import { View, Text, ScrollView, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform, TouchableOpacity } from "react-native";
+import { Stack, useRouter } from "expo-router";
+import { UIThemeContext } from "@/context/ThemeContext";
+import { useAuth } from "@clerk/clerk-expo";
+import VendorApiRoutes from "@/API/routes/VendorApiRoutes";
+import { Toast } from "@/lib/toast";
+import { useDashboard } from "@/hooks/queries/useDashboard";
+import { useQueryClient } from "@tanstack/react-query";
+import { PressableScale } from "@/components/ui/PressableScale";
+import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
+import * as Location from "expo-location";
+import { BRAND } from "@/constants/brandColors";
+import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
 
 export default function StoreProfile() {
-  const { currentTheme } = useContext(UIThemeContext);
-  const darkTheme = currentTheme === "dark";
-  const { getToken } = useAuth();
-  const router = useRouter();
+    const { currentTheme } = useContext(UIThemeContext);
+    const darkTheme = currentTheme === "dark";
+    const router = useRouter();
+    const { data: dashboard, isLoading: dashLoading } = useDashboard();
+    const { data: vendorProfile } = useVendorProfile();
+    const queryClient = useQueryClient();
+    const { getToken } = useAuth();
+    
+    const isStaff = vendorProfile?.role === "staff";
 
-  const [vendor, setVendor] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+    const [isEditing, setIsEditing] = useState(false);
+    const [businessName, setBusinessName] = useState(dashboard?.business_name || "");
+    const [ownersName, setOwnersName] = useState(dashboard?.owners_name || "");
+    const [phone, setPhone] = useState(dashboard?.phone_number || "");
+    const [businessLicense, setBusinessLicense] = useState(dashboard?.business_license || "");
+    const [depositFee, setDepositFee] = useState(dashboard?.deposit_fee?.toString() || "");
+    const [vendorType, setVendorType] = useState(dashboard?.vendor_type || "retail_refill");
 
-  // Bottom Sheets
-  const hoursSheetRef = useRef<BottomSheetModal>(null);
-  const depositSheetRef = useRef<BottomSheetModal>(null);
-  const staffSheetRef = useRef<BottomSheetModal>(null);
-  const snapPoints = useMemo(() => ["50%", "75%"], []);
+    React.useEffect(() => {
+        if (dashboard && !isEditing) {
+            setBusinessName(dashboard.business_name || "");
+            setOwnersName(dashboard.owners_name || "");
+            setPhone(dashboard.phone_number || "");
+            setBusinessLicense(dashboard.business_license || "");
+            setDepositFee(dashboard.deposit_fee?.toString() || "");
+            setVendorType(dashboard.vendor_type || "retail_refill");
+        }
+    }, [dashboard, isEditing]);
+    
+    // Location state
+    const [locationData, setLocationData] = useState<{lat: number, lng: number, address: string} | null>(null);
+    const [fetchingLocation, setFetchingLocation] = useState(false);
+    const [manualAddress, setManualAddress] = useState("");
+    const [showManualEntry, setShowManualEntry] = useState(false);
+    
+    const [isSaving, setIsSaving] = useState(false);
 
-  const [tempStart, setTempStart] = useState("");
-  const [tempEnd, setTempEnd] = useState("");
-  const [tempDepositFee, setTempDepositFee] = useState("");
-  const [staffEmail, setStaffEmail] = useState("");
+    const getLocation = async () => {
+        setFetchingLocation(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        try {
+            const { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                Toast.error("Permission Denied", "We need location access to map your store. Please enable it in Settings.");
+                setShowManualEntry(true);
+                setFetchingLocation(false);
+                return;
+            }
 
-  const renderBackdrop = useCallback((props: any) => (
-    <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.5} />
-  ), []);
+            let coords: { latitude: number; longitude: number } | null = null;
+            try {
+                const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+                coords = current.coords;
+            } catch (_e1) {
+                if (__DEV__) console.warn("Tier 1 (High) GPS failed, trying Low...");
+            }
 
-  const fetchProfile = async () => {
-    try {
-      const token = await getToken();
-      const res = await fetch(VendorApiRoutes.GetProfile.path, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setVendor(data);
-        if (data.shift_start) setTempStart(data.shift_start);
-        if (data.shift_end) setTempEnd(data.shift_end);
-        if (data.deposit_fee != null) setTempDepositFee(String(data.deposit_fee));
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+            if (!coords) {
+                try {
+                    const current = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Low });
+                    coords = current.coords;
+                } catch (_e2) {
+                    if (__DEV__) console.warn("Tier 2 (Low) GPS failed, trying last known...");
+                }
+            }
 
-  useEffect(() => { fetchProfile(); }, []);
+            if (!coords) {
+                try {
+                    const lastKnown = await Location.getLastKnownPositionAsync();
+                    if (lastKnown) {
+                        coords = lastKnown.coords;
+                    }
+                } catch (_e3) {
+                    if (__DEV__) console.warn("Tier 3 (LastKnown) also failed.");
+                }
+            }
 
-  const handleUpdate = async (payload: any, successMessage: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const token = await getToken();
-    try {
-      const res = await fetch(VendorApiRoutes.UpdateProfile.path, {
-        method: VendorApiRoutes.UpdateProfile.method,
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error("Update failed");
-      setVendor((prev: any) => ({ ...prev, ...payload }));
-      Toast.success("Success", successMessage);
-      return true;
-    } catch (e) {
-      Toast.error("Error", "Failed to update store settings");
-      return false;
-    }
-  };
+            if (!coords) {
+                Toast.error("GPS Unavailable", "Could not get your position. Please enter your address manually below.");
+                setShowManualEntry(true);
+                setFetchingLocation(false);
+                return;
+            }
 
-  const saveHours = async () => {
-    hoursSheetRef.current?.dismiss();
-    await handleUpdate({ shift_start: tempStart, shift_end: tempEnd }, "Operating hours updated.");
-  };
+            const { latitude, longitude } = coords;
+            let address = "Unknown Location";
+            try {
+                const geocodeResponse = await Location.reverseGeocodeAsync({ latitude, longitude });
+                if (geocodeResponse.length > 0) {
+                    const place = geocodeResponse[0];
+                    address = [place.name, place.street, place.city, place.region].filter(Boolean).join(", ");
+                }
+            } catch (geocodeError) {
+                address = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+            }
 
-  const saveDeposit = async () => {
-    const feeValue = parseFloat(tempDepositFee);
-    if (isNaN(feeValue) || feeValue < 0 || feeValue > 5000) {
-      Toast.error("Invalid", "Fee must be between KSH 0 and KSH 5,000.");
-      return;
-    }
-    depositSheetRef.current?.dismiss();
-    await handleUpdate({ deposit_fee: feeValue }, `Deposit fee updated to KSH ${feeValue.toLocaleString()}.`);
-  };
+            setLocationData({ lat: latitude, lng: longitude, address });
+            setShowManualEntry(false);
+            Toast.success("Location Found", address);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (e) {
+            Toast.error("Location Error", "GPS failed. Please enter your address manually.");
+            setShowManualEntry(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setFetchingLocation(false);
+        }
+    };
 
-  const InfoRow = ({ label, value }: { label: string; value: string }) => (
-    <View className={`flex-row justify-between py-3 border-b ${darkTheme ? "border-slate-800/80" : "border-slate-100"}`}>
-      <Text className={`${darkTheme ? "text-slate-400" : "text-slate-500"}`}>{label}</Text>
-      <Text className={`font-semibold ${darkTheme ? "text-slate-200" : "text-slate-900"}`}>{value || "—"}</Text>
-    </View>
-  );
+    const handleManualLocation = async () => {
+        if (!manualAddress || manualAddress.length < 5) {
+            return Toast.error("Required", "Please enter a valid store address.");
+        }
+        
+        setFetchingLocation(true);
+        try {
+            const geocodeResponse = await Location.geocodeAsync(manualAddress);
+            if (geocodeResponse.length > 0) {
+                const { latitude, longitude } = geocodeResponse[0];
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setLocationData({ lat: latitude, lng: longitude, address: manualAddress });
+                Toast.success("Address Saved", manualAddress);
+            } else {
+                Toast.error("Location Not Found", "Could not pinpoint this address. Please be more specific (e.g., add city/country).");
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
+        } catch (error) {
+            Toast.error("Geocoding Error", "Failed to resolve address to map coordinates.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setFetchingLocation(false);
+        }
+    };
 
-  return (
-    <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
-      <StatusBar translucent backgroundColor={darkTheme ? "black" : "white"} barStyle={darkTheme ? "light-content" : "dark-content"} />
+    const handleSave = async () => {
+        if (!businessName.trim() || !ownersName.trim()) {
+            Toast.error("Validation Error", "Store Name and Owner Name cannot be empty.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            return;
+        }
 
-      <View style={{ overflow: "hidden", paddingBottom: 4 }}>
-        <View 
-          className="flex-row items-center px-4 py-3 pb-4 mb-2"
-          style={{ 
-            backgroundColor: darkTheme ? "#000" : "#fff",
-            borderBottomWidth: 1, 
-            borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
-            ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
-          }}
-        >
-          <PressableScale onPress={() => router.back()} className="mr-4">
-            <BackButtonMinimal />
-          </PressableScale>
-          <Text className={`text-xl font-bold flex-1 ${darkTheme ? "text-white" : "text-slate-900"}`}>Store Profile</Text>
+        const phoneRegex = /^(?:\+254|0)[17]\d{8}$/; 
+        if (phone.trim() && !phoneRegex.test(phone.trim())) {
+            Toast.error("Invalid Phone", "Please enter a valid Kenyan phone number.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            return;
+        }
+
+        if (isStaff) {
+            Toast.error("Access Denied", "Staff members cannot edit business information.");
+            return;
+        }
+
+        if (depositFee.trim() && isNaN(Number(depositFee.trim()))) {
+            Toast.error("Invalid Input", "Deposit fee must be a valid number.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            return;
+        }
+
+        setIsSaving(true);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+        try {
+            const token = await getToken();
+            const payload: any = {
+                business_name: businessName.trim(),
+                owners_name: ownersName.trim(),
+                phone_number: phone.trim() || null,
+                business_license: businessLicense.trim() || null,
+                vendor_type: vendorType,
+            };
+
+            if (depositFee.trim()) {
+                payload.deposit_fee = Number(depositFee.trim());
+            }
+
+            if (locationData) {
+                payload.lat = locationData.lat;
+                payload.lng = locationData.lng;
+                payload.location_address = locationData.address;
+            }
+
+            const res = await fetch(VendorApiRoutes.UpdateProfile.path, {
+                method: VendorApiRoutes.UpdateProfile.method,
+                headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
+            if (res.ok) {
+                queryClient.invalidateQueries({ queryKey: ["vendorDashboard"] });
+                Toast.success("Saved", "Store Profile updated successfully.");
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                setIsEditing(false);
+            } else {
+                const err = await res.json();
+                Toast.error("Update Failed", err.detail || "Unable to update profile.");
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            }
+        } catch (error: unknown) {
+            Toast.error("Network Error", "Check your connection and try again.");
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const shadowStyle = darkTheme 
+        ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } 
+        : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 };
+
+    const InfoRow = ({ label, value, stateVal, setStateVal, placeholder, editable = true, keyboardType = "default" }: any) => (
+        <View className={`flex-row justify-between py-3 border-b ${darkTheme ? "border-slate-800/80" : "border-gray-100"}`}>
+            <Text className={`w-1/3 mt-3 text-sm font-semibold ${darkTheme ? "text-slate-400" : "text-gray-500"}`}>{label}</Text>
+            {isEditing && editable ? (
+                <TextInput
+                    value={stateVal}
+                    onChangeText={setStateVal}
+                    placeholder={placeholder || `Enter ${label}`}
+                    placeholderTextColor={darkTheme ? "#666" : "#999"}
+                    keyboardType={keyboardType}
+                    className={`w-[60%] p-3 rounded-xl border ${darkTheme ? "bg-white/5 border-white/10 text-white" : "bg-white border-gray-200 text-gray-900"}`}
+                />
+            ) : (
+                <Text className={`flex-1 mt-3 font-semibold text-right ${darkTheme ? "text-slate-200" : "text-gray-900"} ${!editable && isEditing ? "opacity-50" : ""}`}>{value || "—"}</Text>
+            )}
         </View>
-      </View>
+    );
 
-      <ScrollView className="px-5" contentContainerStyle={{ paddingBottom: 120 }}>
-        {/* Store Identity */}
-        <View className="items-center pt-8 pb-8">
-          <View 
-            className={`w-28 h-28 rounded-full items-center justify-center mb-4 border-[3px] p-1 ${darkTheme ? "bg-surface-container" : "bg-white"}`}
-            style={{
-              borderColor: BRAND.primary,
-              ...(darkTheme ? {} : {
-                ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
-              })
-            }}
-          >
-            <View className={`w-full h-full rounded-full items-center justify-center overflow-hidden ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-              {vendor?.profile_pic ? (
-                <Image source={{ uri: vendor.profile_pic }} style={{ width: "100%", height: "100%" }} cachePolicy="disk" transition={200} />
-              ) : (
-                <Ionicons name="storefront-outline" size={40} color={BRAND.primary} />
-              )}
+    const OperationsCard = ({ title, desc, icon, href, color }: any) => (
+        <PressableScale onPress={() => router.push(href)} activeOpacity={0.7} className="mb-3">
+            <View className={`rounded-2xl p-4 flex-row items-center border ${darkTheme ? "bg-surface-container border-gray-800" : "bg-white border-gray-200"}`} style={shadowStyle}>
+                <View className={`p-3 rounded-full mr-4 ${darkTheme ? "bg-blue-900/40" : "bg-blue-50"}`}>
+                    <Ionicons name={icon} size={26} color={color || BRAND.primary} />
+                </View>
+                <View className="flex-1">
+                    <Text className={`text-base font-bold ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>{title}</Text>
+                    <Text className={`text-xs mt-0.5 ${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>{desc}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color={BRAND.primary} />
             </View>
-          </View>
-          <Text className={`text-2xl font-bold text-center ${darkTheme ? "text-white" : "text-slate-900"}`}>
-            {vendor?.business_name || "Store Name"}
-          </Text>
-          <View className={`px-3 py-1 mt-2 rounded-full ${vendor?.verification_status === 'verified' ? 'bg-green-500/20' : 'bg-yellow-500/20'}`}>
-            <Text className={`font-bold text-xs uppercase ${vendor?.verification_status === 'verified' ? 'text-green-500' : 'text-yellow-600'}`}>
-              {vendor?.verification_status || 'Pending'}
-            </Text>
-          </View>
-        </View>
-
-        {/* Public Details */}
-        <View className={`rounded-[24px] p-6 mb-8 border shadow-sm ${darkTheme ? "bg-surface-container" : "bg-white border-gray-100"}`}>
-          <Text className={`font-bold text-xl mb-3 ${darkTheme ? "text-white" : "text-slate-900"}`}>Public Details</Text>
-          <InfoRow label="Business Name" value={vendor?.business_name} />
-          <InfoRow label="Support Phone" value={vendor?.phone_number} />
-          <InfoRow label="Location" value={vendor?.location_address} />
-          <InfoRow label="Delivery Radius" value={vendor?.delivery_radius ? `${vendor.delivery_radius} km` : "Not set"} />
-        </View>
-
-        <Text className={`mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>Operations</Text>
-
-        <PressableScale
-          onPress={() => hoursSheetRef.current?.present()}
-          activeOpacity={0.7}
-          className={`rounded-3xl p-5 mb-3 flex-row justify-between items-center border shadow-sm ${darkTheme ? "bg-surface-container" : "bg-white border-gray-100"}`}
-        >
-          <View className="flex-row items-center">
-            <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-               <Ionicons name="time-outline" size={24} color={BRAND.primary} />
-            </View>
-            <View>
-              <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Operating Hours</Text>
-              <Text className={`text-sm mt-1 font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                {vendor?.shift_start || "Not set"} - {vendor?.shift_end || "Not set"}
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="pencil" size={20} color="#d9a31b" />
         </PressableScale>
+    );
 
-        <PressableScale
-          onPress={() => depositSheetRef.current?.present()}
-          activeOpacity={0.7}
-          className={`rounded-3xl p-5 mb-3 flex-row justify-between items-center border shadow-sm ${darkTheme ? "bg-surface-container" : "bg-white border-gray-100"}`}
-        >
-          <View className="flex-row items-center">
-            <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-               <Ionicons name="water-outline" size={24} color={BRAND.primary} />
-            </View>
-            <View>
-              <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Bottle Deposit Fee</Text>
-              <Text className={`text-sm mt-1 font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                {vendor?.deposit_fee != null ? `KSH ${Number(vendor.deposit_fee).toLocaleString()}` : "Not set"}
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="pencil" size={20} color="#d9a31b" />
-        </PressableScale>
+    return (
+        <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
+            <Stack.Screen options={{ headerShown: false }} />
+            <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1">
+                <View style={{ overflow: "hidden", paddingBottom: 4 }}>
+                    <View 
+                        className="flex-row items-center px-4 py-3 pb-4 mb-2"
+                        style={{ 
+                            backgroundColor: darkTheme ? "#000" : "#fff",
+                            borderBottomWidth: 1, 
+                            borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
+                            ...shadowStyle
+                        }}
+                    >
+                        <PressableScale onPress={() => router.back()} className="mr-4">
+                            <BackButtonMinimal />
+                        </PressableScale>
+                        <Text className={`text-xl font-bold flex-1 ${darkTheme ? "text-white" : "text-slate-900"}`}>
+                            Store Profile
+                        </Text>
+                    </View>
+                </View>
+                
+                <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 120 }} showsVerticalScrollIndicator={false}>
+                    
+                    {dashLoading ? (
+                        // Skeletons correctly shaped
+                        <View className="animate-pulse">
+                            <View className={`h-6 w-1/2 rounded-md mb-4 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                            <View className={`rounded-2xl p-4 mb-8 ${darkTheme ? "bg-white/5" : "bg-white border border-gray-100"}`}>
+                                <View className={`h-12 border-b mb-1 ${darkTheme ? "border-white/5" : "border-gray-100"}`}>
+                                    <View className={`h-4 w-3/4 rounded-md mt-4 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                </View>
+                                <View className={`h-12 border-b mb-1 ${darkTheme ? "border-white/5" : "border-gray-100"}`}>
+                                    <View className={`h-4 w-1/2 rounded-md mt-4 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                </View>
+                                <View className={`h-12 border-b mb-1 ${darkTheme ? "border-white/5" : "border-gray-100"}`}>
+                                    <View className={`h-4 w-2/3 rounded-md mt-4 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                </View>
+                                <View className={`h-12 border-b mb-1 ${darkTheme ? "border-white/5" : "border-gray-100"}`}>
+                                    <View className={`h-4 w-[85%] rounded-md mt-4 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                </View>
+                            </View>
+                            <View className={`h-6 w-1/2 rounded-md mb-4 mt-2 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                            <View className={`h-[72px] rounded-2xl mb-3 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                            <View className={`h-[72px] rounded-2xl mb-3 ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                            <View className={`h-[72px] rounded-2xl ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                        </View>
+                    ) : (
+                        <>
+                            <View className="flex-row justify-between items-center mb-4 px-1">
+                                <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-gray-900"}`}>Business Information</Text>
+                                {!isStaff && (
+                                    <PressableScale onPress={() => setIsEditing(!isEditing)} className="px-3 py-1 bg-accentbg/10 rounded-full">
+                                        <Text className="text-accentbg font-semibold">{isEditing ? "Cancel" : "Edit"}</Text>
+                                    </PressableScale>
+                                )}
+                            </View>
 
-        {/* Staff Management */}
-        <Text className={`mt-6 mb-4 ml-2 font-bold text-xl tracking-tight ${darkTheme ? "text-white" : "text-slate-900"}`}>Team</Text>
-        <PressableScale
-          onPress={() => staffSheetRef.current?.present()}
-          activeOpacity={0.7}
-          className={`rounded-3xl p-5 mb-8 flex-row justify-between items-center border shadow-sm ${darkTheme ? "bg-surface-container" : "bg-white border-gray-100"}`}
-        >
-          <View className="flex-row items-center">
-            <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-               <Ionicons name="people-circle-outline" size={24} color={BRAND.primary} />
-            </View>
-            <View>
-              <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Store Staff</Text>
-              <Text className={`text-sm mt-1 font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                {vendor?.staff_clerk_id ? "Staff member linked" : "Assign your station staff"}
-              </Text>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color={BRAND.primary} />
-        </PressableScale>
+                            <View className={`rounded-2xl p-4 mb-8 ${darkTheme ? "bg-white/5 border border-white/5" : "bg-white border border-gray-100"} shadow-sm`}>
+                                <InfoRow label="Store Name" value={dashboard?.business_name} stateVal={businessName} setStateVal={setBusinessName} />
+                                <InfoRow label="Owner Name" value={dashboard?.owners_name} stateVal={ownersName} setStateVal={setOwnersName} />
+                                <InfoRow label="Email Address" value={dashboard?.email} editable={false} />
+                                <InfoRow label="Phone Number" value={dashboard?.phone_number} stateVal={phone} setStateVal={setPhone} keyboardType="phone-pad" placeholder="07XXXXXXXX" />
+                                
+                                {isEditing ? (
+                                    <>
+                                        <InfoRow label="Business License" value={dashboard?.business_license} stateVal={businessLicense} setStateVal={setBusinessLicense} placeholder="License No" />
+                                        <InfoRow label="Deposit Fee" value={dashboard?.deposit_fee?.toString()} stateVal={depositFee} setStateVal={setDepositFee} keyboardType="numeric" placeholder="e.g. 500" />
+                                        
+                                        {/* Vendor Type Selection */}
+                                        <View className={`flex-row justify-between py-4 border-b ${darkTheme ? "border-slate-800/80" : "border-gray-100"}`}>
+                                            <Text className={`w-1/3 mt-2 text-sm font-semibold ${darkTheme ? "text-slate-400" : "text-gray-500"}`}>Vendor Type</Text>
+                                            <View className="w-[60%] flex-row gap-2">
+                                                <PressableScale onPress={() => setVendorType("retail_refill")} className={`flex-1 py-2 px-1 items-center justify-center rounded-lg border ${vendorType === "retail_refill" ? (darkTheme ? "bg-accentbg/20 border-accentbg" : "bg-accentbg/10 border-accentbg") : (darkTheme ? "border-gray-700" : "border-gray-300")}`}>
+                                                    <Text className={`text-xs font-semibold text-center ${vendorType === "retail_refill" ? (darkTheme ? "text-accenttxt" : "text-accentbg") : (darkTheme ? "text-gray-400" : "text-gray-500")}`}>Retail</Text>
+                                                </PressableScale>
+                                                <PressableScale onPress={() => setVendorType("wholesale_b2b")} className={`flex-1 py-2 px-1 items-center justify-center rounded-lg border ${vendorType === "wholesale_b2b" ? (darkTheme ? "bg-accentbg/20 border-accentbg" : "bg-accentbg/10 border-accentbg") : (darkTheme ? "border-gray-700" : "border-gray-300")}`}>
+                                                    <Text className={`text-xs font-semibold text-center ${vendorType === "wholesale_b2b" ? (darkTheme ? "text-accenttxt" : "text-accentbg") : (darkTheme ? "text-gray-400" : "text-gray-500")}`}>Wholesale</Text>
+                                                </PressableScale>
+                                            </View>
+                                        </View>
+                                    </>
+                                ) : (
+                                    <>
+                                        <InfoRow label="Business License" value={dashboard?.business_license || "Not Provided"} editable={false} />
+                                        <InfoRow label="Vendor Type" value={dashboard?.vendor_type === "wholesale_b2b" ? "Wholesale (B2B)" : (dashboard?.vendor_type === "retail_refill" ? "Retail Refill" : "N/A")} editable={false} />
+                                        <InfoRow label="Deposit Fee" value={dashboard?.deposit_fee != null ? `Ksh ${dashboard?.deposit_fee}` : "N/A"} editable={false} />
+                                        <InfoRow label="Operating Hours" value={dashboard?.shift_start && dashboard?.shift_end ? `${dashboard.shift_start.slice(0, 5)} - ${dashboard.shift_end.slice(0, 5)}` : "Not Set"} editable={false} />
+                                        <View className="flex-row justify-between pt-3">
+                                            <Text className={`w-1/3 mt-3 text-sm font-semibold ${darkTheme ? "text-slate-400" : "text-gray-500"}`}>Location</Text>
+                                            <Text className={`flex-1 mt-3 font-semibold text-right ${darkTheme ? "text-slate-200" : "text-gray-900"}`}>{dashboard?.location_address || "Not Set"}</Text>
+                                        </View>
+                                    </>
+                                )}
+                            </View>
 
-      </ScrollView>
+                            {/* Location Update Section - ONLY IF EDITING */}
+                            {isEditing && (
+                                <View className={`rounded-2xl p-4 mb-8 ${darkTheme ? "bg-white/5 border border-white/5" : "bg-white border border-gray-100"} shadow-sm`}>
+                                    <Text className={`text-base font-bold mb-2 ${darkTheme ? "text-white" : "text-gray-800"}`}>
+                                        Store Location Update
+                                    </Text>
+                                    <Text className={`text-xs mb-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                        Ensure riders can find your new warehouse. Current: {dashboard?.location_address}
+                                    </Text>
 
-      {/* Sheets */}
-      <BottomSheetModal
-        ref={hoursSheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: darkTheme ? BRAND.bgDark : BRAND.white }}
-      >
-        <BottomSheetView className="flex-1 px-6">
-          <Text className={`text-2xl font-bold mb-6 mt-4 ${darkTheme ? "text-white" : "text-slate-900"}`}>Edit Operating Hours</Text>
-          <View className="mb-5">
-            <Text className={`text-sm mb-2 font-bold uppercase tracking-wider ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Shift Start</Text>
-            <TextInput value={tempStart} onChangeText={setTempStart} placeholder="08:00" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} className={`p-4 rounded-2xl border text-lg font-semibold ${darkTheme ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"}`} />
-          </View>
-          <View className="mb-8">
-            <Text className={`text-sm mb-2 font-bold uppercase tracking-wider ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Shift End</Text>
-            <TextInput value={tempEnd} onChangeText={setTempEnd} placeholder="17:00" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} className={`p-4 rounded-2xl border text-lg font-semibold ${darkTheme ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"}`} />
-          </View>
-          <PressableScale onPress={saveHours} className="py-4 rounded-2xl bg-accentbg items-center">
-            <Text className="text-white font-bold text-lg">Save Hours</Text>
-          </PressableScale>
-        </BottomSheetView>
-      </BottomSheetModal>
+                                    <PressableScale
+                                        onPress={getLocation}
+                                        disabled={fetchingLocation}
+                                        className={`h-[55px] rounded-xl items-center justify-center border-2 border-dashed ${darkTheme ? "border-accentbg/50 bg-accentbg/10" : "border-accentbg bg-accentbg/5"}`}
+                                    >
+                                        {fetchingLocation ? (
+                                            <ActivityIndicator color={BRAND.primary} />
+                                        ) : (
+                                            <View className="flex-row items-center gap-2">
+                                                <Ionicons name="location" size={18} color={BRAND.primary} />
+                                                <Text className={`font-bold text-base ${darkTheme ? "text-accentbg" : "text-blue-600"}`}>Update via GPS</Text>
+                                            </View>
+                                        )}
+                                    </PressableScale>
 
-      <BottomSheetModal
-        ref={depositSheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: darkTheme ? BRAND.bgDark : BRAND.white }}
-      >
-        <BottomSheetView className="flex-1 px-6">
-          <Text className={`text-2xl font-bold mb-6 mt-4 ${darkTheme ? "text-white" : "text-slate-900"}`}>Empty Bottle Deposit</Text>
-          <View className="mb-8">
-            <Text className={`text-sm mb-2 font-bold uppercase tracking-wider ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Deposit Fee (KSH)</Text>
-            <TextInput value={tempDepositFee} onChangeText={(text) => setTempDepositFee(text.replace(/[^0-9.]/g, ''))} keyboardType="numeric" placeholder="e.g. 500" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} className={`p-4 rounded-2xl border text-lg font-semibold ${darkTheme ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"}`} />
-          </View>
-          <PressableScale onPress={saveDeposit} className="py-4 rounded-2xl bg-accentbg items-center">
-            <Text className="text-white font-bold text-lg">Save Deposit</Text>
-          </PressableScale>
-        </BottomSheetView>
-      </BottomSheetModal>
+                                    {(showManualEntry || locationData) && (
+                                        <View className="flex-row items-center my-4">
+                                            <View className={`flex-1 h-[1px] ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                            <Text className={`mx-3 text-xs ${darkTheme ? "text-gray-500" : "text-gray-400"}`}>or</Text>
+                                            <View className={`flex-1 h-[1px] ${darkTheme ? "bg-white/10" : "bg-gray-200"}`} />
+                                        </View>
+                                    )}
 
-      <BottomSheetModal
-        ref={staffSheetRef}
-        index={0}
-        snapPoints={snapPoints}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: darkTheme ? BRAND.bgDark : BRAND.white }}
-      >
-        <BottomSheetView className="flex-1 px-6">
-          <Text className={`text-2xl font-bold mb-2 mt-4 ${darkTheme ? "text-white" : "text-slate-900"}`}>Staff Account</Text>
-          <Text className={`text-sm mb-6 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-            Only ONE staff member is permitted per station. Enter their Clerk ID to grant them access to this store's operations.
-          </Text>
-          <View className="mb-8">
-            <Text className={`text-sm mb-2 font-bold uppercase tracking-wider ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Staff Clerk ID</Text>
-            <TextInput value={staffEmail} onChangeText={setStaffEmail} placeholder="user_..." placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} className={`p-4 rounded-2xl border text-lg font-semibold ${darkTheme ? "bg-slate-800 border-slate-700 text-white" : "bg-white border-slate-200 text-slate-900"}`} />
-          </View>
-          <PressableScale onPress={() => {Toast.info("Coming soon", "Staff assignment is being integrated."); staffSheetRef.current?.dismiss();}} className="py-4 rounded-2xl bg-accentbg items-center">
-            <Text className="text-white font-bold text-lg">Assign Staff</Text>
-          </PressableScale>
-        </BottomSheetView>
-      </BottomSheetModal>
+                                    {showManualEntry && !locationData && (
+                                        <View className="gap-3">
+                                            <TextInput
+                                                className={`h-[55px] px-4 rounded-xl text-base ${darkTheme ? "bg-black text-white border border-white/20" : "bg-white text-black border border-gray-200"}`}
+                                                placeholder="e.g. Moi Avenue, Nairobi CBD"
+                                                placeholderTextColor={darkTheme ? "#555" : "#A0AEC0"}
+                                                value={manualAddress}
+                                                onChangeText={setManualAddress}
+                                            />
+                                            <PressableScale
+                                                onPress={handleManualLocation}
+                                                disabled={!manualAddress || manualAddress.length < 5}
+                                                className={`h-[48px] rounded-xl items-center justify-center ${!manualAddress || manualAddress.length < 5 ? (darkTheme ? "bg-white/5" : "bg-gray-100") : (darkTheme ? "bg-white/10" : "bg-white border border-gray-200")}`}
+                                            >
+                                                <View className="flex-row items-center gap-2">
+                                                    <Ionicons name="pencil" size={14} color={BRAND.primary} />
+                                                    <Text className={`font-semibold ${darkTheme ? "text-gray-400" : "text-gray-600"}`}>Use This Address</Text>
+                                                </View>
+                                            </PressableScale>
+                                        </View>
+                                    )}
 
-    </SafeAreaView>
-  );
+                                    {locationData && (
+                                        <View className={`p-4 mt-2 rounded-xl border ${darkTheme ? "bg-black border-green-900" : "bg-green-50 border-green-200"}`}>
+                                            <View className="flex-row items-center gap-2">
+                                                <Ionicons name="checkmark-circle" size={20} color={BRAND.primary} />
+                                                <Text className={`text-base font-bold ${darkTheme ? "text-green-400" : "text-green-700"}`}>New Location Ready</Text>
+                                            </View>
+                                            <Text className={`mt-2 ${darkTheme ? "text-gray-300" : "text-gray-700"}`}>{locationData.address}</Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
+                            {isEditing && (
+                                <PressableScale activeOpacity={0.8} onPress={handleSave} disabled={isSaving}>
+                                    <View className={`py-4 mb-8 rounded-2xl items-center ${isSaving ? "bg-accentbg/50" : "bg-accentbg"}`} style={shadowStyle}>
+                                        {isSaving ? (
+                                            <ActivityIndicator color={BRAND.white} />
+                                        ) : (
+                                            <Text className="text-white text-lg font-bold">Save Changes</Text>
+                                        )}
+                                    </View>
+                                </PressableScale>
+                            )}
+
+                            {/* Vendor Operations Network Block */}
+                            {!isEditing && (
+                                <View className="mt-2 mb-4">
+                                    <Text className={`mb-4 ml-1 font-bold text-lg ${darkTheme ? "text-white" : "text-gray-800"}`}>Operations & Team</Text>
+                                    
+                                    {!isStaff && (
+                                        <>
+                                            <OperationsCard 
+                                                title="Operating Hours" 
+                                                desc="Set store open and close times" 
+                                                icon="time-outline" 
+                                                href="/(screens)/business/OperatingHours" 
+                                            />
+                                            
+                                            <OperationsCard 
+                                                title="Staff Management" 
+                                                desc="Delegate operations to a team member" 
+                                                icon="people-outline" 
+                                                href="/(screens)/business/ManageStaff" 
+                                            />
+                                            
+                                            <OperationsCard 
+                                                title="Payout Settings" 
+                                                desc="Configure bank or M-Pesa details" 
+                                                icon="card-outline" 
+                                                href="/(screens)/business/PayoutSettings" 
+                                            />
+                                        </>
+                                    )}
+                                </View>
+                            )}
+                        </>
+                    )}
+                </ScrollView>
+            </KeyboardAvoidingView>
+        </SafeAreaView>
+    );
 }

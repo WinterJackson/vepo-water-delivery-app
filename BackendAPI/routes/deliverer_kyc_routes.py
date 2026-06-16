@@ -5,7 +5,7 @@ from typing import Optional
 
 from dependencies.dependencies import get_db
 from models.deliverer_model import Deliverer, KYCStatus
-from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_rider
 from utils.s3_utils import upload_file_to_s3
 
 router = APIRouter(
@@ -20,7 +20,7 @@ async def upload_kyc_documents(
     driver_license: Optional[UploadFile] = File(None),
     plate_number: Optional[str] = Form(None),
     vehicle_type: Optional[str] = Form(None),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_rider),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -80,7 +80,7 @@ async def upload_kyc_documents(
 
 @router.get("/status")
 async def get_kyc_status(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_rider),
     db: AsyncSession = Depends(get_db)
 ):
     """

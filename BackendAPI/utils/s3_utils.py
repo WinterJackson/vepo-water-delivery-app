@@ -5,6 +5,10 @@ from fastapi import UploadFile
 import uuid
 import mimetypes
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 # Initialize S3 client
 # In production, these should be loaded from environment variables
 # For now, we will use a fallback logic if keys are missing
@@ -61,10 +65,10 @@ async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
             return f"/api/uploads/{file_name}"
             
     except ClientError as e:
-        print(f"S3 Upload Error: {e}")
+        logger.error(f"S3 Upload Error: {e}", exc_info=True)
         return None
     except NoCredentialsError:
-        print("Credentials not available")
+        logger.error("AWS Credentials not available for S3 upload")
         return None
     finally:
         # Reset file cursor for subsequent reads if needed

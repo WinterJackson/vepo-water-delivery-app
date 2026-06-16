@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.dependencies import get_db
-from utils.verify_user_token import get_current_user
+from dependencies.auth_dependencies import get_current_vendor
 from services.vendor_management_service import get_vendor_by_clerk_id
 from models.vendor_rider_model import VendorRiderRegistry
 from models.deliverer_model import Deliverer
@@ -22,7 +22,7 @@ class RiderActionRequest(BaseModel):
     action: str # "approve", "reject", "suspend"
 
 @router.get("/my-riders")
-async def get_vendor_riders(session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def get_vendor_riders(session: AsyncSession = Depends(get_db), user = Depends(get_current_vendor)):
     clerk_id = user["sub"]
     vendor = await get_vendor_by_clerk_id(session, clerk_id)
     if not vendor:
@@ -48,12 +48,14 @@ async def get_vendor_riders(session: AsyncSession = Depends(get_db), user = Depe
             "plate_number": deliverer.plate_number,
             "is_available": deliverer.is_available,
             "applied_at": reg.created_at,
+            "pending_10L_empties": reg.pending_10L_empties or 0,
+            "pending_20L_empties": reg.pending_20L_empties or 0,
         })
         
     return riders
 
 @router.put("/rider-action")
-async def manage_rider_status(request: RiderActionRequest, session: AsyncSession = Depends(get_db), user = Depends(get_current_user)):
+async def manage_rider_status(request: RiderActionRequest, session: AsyncSession = Depends(get_db), user = Depends(get_current_vendor)):
     clerk_id = user["sub"]
     vendor = await get_vendor_by_clerk_id(session, clerk_id)
     if not vendor:

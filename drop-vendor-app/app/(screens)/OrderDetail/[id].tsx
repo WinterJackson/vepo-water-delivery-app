@@ -20,29 +20,33 @@ import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts"
 import { useRef, useMemo, useCallback } from "react";
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: "bg-[#f59e0b]/20 border-[#f59e0b]/30",
+  pending: "bg-amber-500/20 border-amber-500/30",
   accepted: "bg-accentbg/20 border-accentbg/30",
   preparing: "bg-purple-500/20 border-purple-500/30",
-  ready: "bg-[#10b981]/20 border-[#10b981]/30",
+  ready: "bg-green-500/20 border-green-500/30",
   rejected: "bg-red-500/20 border-red-500/30",
-  in_transit: "bg-[#0ea5e9]/20 border-[#0ea5e9]/30",
-  picked_up: "bg-[#0ea5e9]/20 border-[#0ea5e9]/30",
-  delivered: "bg-[#10b981]/20 border-[#10b981]/30",
+  in_transit: "bg-sky-500/20 border-sky-500/30",
+  picked_up: "bg-sky-500/20 border-sky-500/30",
+  delivered: "bg-green-500/20 border-green-500/30",
   unassigned: "bg-slate-500/20 border-slate-500/30",
   cancelled: "bg-red-500/20 border-red-500/30",
+  refund_pending: "bg-amber-500/20 border-amber-500/30",
+  refunded: "bg-slate-500/20 border-slate-500/30",
 };
 
 const STATUS_TEXT_COLORS: Record<string, string> = {
-  pending: "text-[#f59e0b]",
+  pending: "text-amber-500",
   accepted: "text-accentbg",
   preparing: "text-purple-500",
-  ready: "text-[#10b981]",
+  ready: "text-green-500",
   rejected: "text-red-500",
-  in_transit: "text-[#0ea5e9]",
-  picked_up: "text-[#0ea5e9]",
-  delivered: "text-[#10b981]",
+  in_transit: "text-sky-500",
+  picked_up: "text-sky-500",
+  delivered: "text-green-500",
   unassigned: "text-slate-500",
   cancelled: "text-red-500",
+  refund_pending: "text-amber-500",
+  refunded: "text-slate-500",
 };
 
 export default function OrderDetail() {
@@ -126,6 +130,27 @@ export default function OrderDetail() {
         const errMsg = e.response?.data?.detail || (e as Error).message || "Failed to update status. Please check your connection.";
         Toast.error("Update Failed", errMsg);
       });
+    }
+  };
+
+  const cancelOrder = async () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    const token = await getToken();
+    try {
+      const res = await fetch(VendorApiRoutes.CancelOrder(id as string).path, {
+        method: VendorApiRoutes.CancelOrder(id as string).method,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        queryClient.invalidateQueries({ queryKey: ["vendorOrders"] });
+        import("@/lib/toast").then(({ Toast }) => Toast.success("Cancelled", "Order has been cancelled."));
+      } else {
+        const err = await res.json();
+        import("@/lib/toast").then(({ Toast }) => Toast.error("Error", err.detail || "Failed to cancel order."));
+      }
+    } catch (e) {
+      if (__DEV__) console.error(e);
+      import("@/lib/toast").then(({ Toast }) => Toast.error("Error", "Network error while cancelling."));
     }
   };
 
@@ -263,7 +288,7 @@ export default function OrderDetail() {
                       borderColor: darkTheme ? 'rgba(14, 165, 233, 0.15)' : 'rgba(14, 165, 233, 0.12)',
                     }}
                   >
-                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: '#0ea5e920' }}>
+                    <View className="w-11 h-11 rounded-full items-center justify-center" style={{ backgroundColor: 'rgba(14, 165, 233, 0.2)' }}>
                       <Ionicons name="bicycle" size={20} color="#0ea5e9" />
                     </View>
                     <View className="flex-1">
@@ -315,7 +340,7 @@ export default function OrderDetail() {
                   <Ionicons 
                     name={order.delivery_type === 'quick_swap' ? 'flash' : 'lock-closed'} 
                     size={12} 
-                    color={order.delivery_type === 'quick_swap' ? '#3b82f6' : '#10b981'} 
+                    color={order.delivery_type === 'quick_swap' ? '#3b82f6' : 'green-500'} 
                   />
                   <Text className={`font-bold text-xs ${order.delivery_type === 'quick_swap' ? 'text-blue-500' : 'text-green-500'}`}>
                     {order.delivery_type === 'quick_swap' ? 'Quick Swap' : 'Keep My Bottle'}
@@ -330,7 +355,7 @@ export default function OrderDetail() {
               </View>
               {order.is_welcome_offer && (
                 <View className="mt-3 p-3 bg-green-500/10 rounded-[16px] border border-green-500/20 flex-row items-center gap-2">
-                  <Ionicons name="gift" size={20} color="#10b981" />
+                  <Ionicons name="gift" size={20} color="green-500" />
                   <Text className="text-green-500 text-xs font-bold flex-1 leading-5">
                     Welcome Offer (30% off) applied to this order.
                   </Text>
@@ -359,13 +384,13 @@ export default function OrderDetail() {
 
           {/* Rider Info if assigned */}
           {order.rider && (
-            <View className={`p-5 rounded-[24px] mb-10 border shadow-sm ${darkTheme ? "bg-[#0ea5e9]/10 border-[#0ea5e9]/20" : "bg-[#0ea5e9]/5 border-[#0ea5e9]/10"}`} style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}>
+            <View className={`p-5 rounded-[24px] mb-10 border shadow-sm ${darkTheme ? "bg-sky-500/10 border-sky-500/20" : "bg-sky-500/5 border-sky-500/10"}`} style={darkTheme ? { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) } : { ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 }) }}>
               <View className="flex-row items-center mb-4">
                  <Ionicons name="bicycle" size={24} color={BRAND.primary} style={{ marginRight: 8 }} />
                  <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-gray-900"}`}>Assigned Rider</Text>
               </View>
               <View className="flex-row items-center mb-2">
-                 <View className="w-10 h-10 rounded-full items-center justify-center bg-[#0ea5e9]/20 mr-3">
+                 <View className="w-10 h-10 rounded-full items-center justify-center bg-sky-500/20 mr-3">
                     <Ionicons name="person" size={18} color={BRAND.primary} />
                  </View>
                  <View>
@@ -374,7 +399,7 @@ export default function OrderDetail() {
                  </View>
                </View>
                <View className="flex-row items-center">
-                 <View className="w-10 h-10 rounded-full items-center justify-center bg-[#0ea5e9]/20 mr-3">
+                 <View className="w-10 h-10 rounded-full items-center justify-center bg-sky-500/20 mr-3">
                     <Ionicons name="car" size={18} color={BRAND.primary} />
                  </View>
                  <View>
@@ -389,6 +414,18 @@ export default function OrderDetail() {
 
         {/* Action Buttons */}
         <View className={`px-5 pb-8 pt-4 border-t ${darkTheme ? "bg-black border-slate-800" : "bg-white border-gray-100"}`}>
+          {order.order_status === "pending" && order.payment_method === "cash" && (
+            <View className={`p-4 mb-4 rounded-xl border ${darkTheme ? "bg-amber-900/20 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+               <View className="flex-row items-center mb-2">
+                 <Ionicons name="warning" size={20} color="#f59e0b" style={{ marginRight: 8 }} />
+                 <Text className={`font-bold text-sm ${darkTheme ? "text-amber-500" : "text-amber-700"}`}>Cash Float Required</Text>
+               </View>
+               <Text className={`text-xs ${darkTheme ? "text-amber-200/70" : "text-amber-700/80"}`}>
+                 This is a Cash order. You must have enough funds in your Wallet to cover the platform's commission to accept it.
+               </Text>
+            </View>
+          )}
+
           {order.order_status === "pending" && (
             <View className="flex-row gap-3">
                <PressableScale
@@ -428,10 +465,33 @@ export default function OrderDetail() {
           {order.order_status === "preparing" && (
             <PressableScale
               onPress={() => updateStatus("ready")}
-              className="w-full bg-[#10b981] py-4 rounded-[16px] items-center shadow-sm"
+              className="w-full bg-green-500 py-4 rounded-[16px] items-center shadow-sm"
             >
               <Text className="text-white font-bold text-lg">Mark as Ready</Text>
             </PressableScale>
+          )}
+
+          {(order.order_status === "accepted" || order.order_status === "preparing") && (
+             <PressableScale
+                onPress={() => {
+                  import("@/lib/popup").then(({ Popup }) => {
+                     Popup.show({
+                       title: "Cancel Order",
+                       message: "Are you sure you want to cancel this order? This cannot be undone.",
+                       cancelText: "No, Go Back",
+                       confirmText: "Yes, Cancel Order",
+                       isDestructive: true,
+                       onConfirm: () => {
+                         import("@/lib/popup").then(({ Popup }) => Popup.hide());
+                         cancelOrder();
+                       }
+                     });
+                  });
+                }}
+                className={`mt-4 py-4 rounded-[16px] items-center shadow-sm border ${darkTheme ? "bg-red-500/10 border-red-500/20" : "bg-red-50 border-red-200"}`}
+              >
+                <Text className="text-red-500 font-bold text-lg">Cancel Order</Text>
+              </PressableScale>
           )}
 
           {(order.order_status === "ready" || order.order_status === "in_transit" || order.order_status === "picked_up" || order.order_status === "delivered") && (

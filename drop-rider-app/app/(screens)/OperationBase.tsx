@@ -300,13 +300,13 @@ export default function OperationBase() {
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // 🟢 FREE OPEN SOURCE MVP MODE (CartoDB / OSM tiles)
             //    Uses provider={undefined} + UrlTile overlay
-            provider={undefined}
+            // provider={undefined}
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             // 🔴 PRODUCTION GOOGLE MAPS MODE
             //    Swap the line above for this one:
-            // provider={PROVIDER_GOOGLE}
+            provider={PROVIDER_GOOGLE}
+            mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
             initialRegion={{
               latitude: location.latitude,
               longitude: location.longitude,
@@ -320,7 +320,7 @@ export default function OperationBase() {
           >
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
             {/* 🟢 OSM TILE OVERLAY (Remove this block when using Google Maps) */}
-            {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
+            {/* {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />} */}
             {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
 
             {/* ══════════════════════════════════════════════════

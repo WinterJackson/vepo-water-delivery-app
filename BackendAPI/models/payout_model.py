@@ -3,7 +3,9 @@ from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import datetime
 from db.session import Base
-
+from sqlalchemy_utils import StringEncryptedType
+from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
+from utils.encryption import DB_ENCRYPTION_KEY
 class Payout(Base):
     __tablename__ = "payouts"
     __table_args__ = (
@@ -16,7 +18,7 @@ class Payout(Base):
     amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(50), default="pending")  # pending, processing, completed, failed
     payment_method = Column(String(100), nullable=False)  # E.g., "mpesa"
-    account_details = Column(String(255), nullable=False)  # Phone number, bank account, etc.
+    account_details = Column(StringEncryptedType(String, DB_ENCRYPTION_KEY, AesEngine, 'pkcs5'), nullable=False)  # Phone number, bank account, etc.
     conversation_id = Column(String(255), nullable=True, index=True)  # M-Pesa B2C ConversationID
     mpesa_receipt = Column(String(255), nullable=True, index=True)  # M-Pesa B2C receipt number
     failure_reason = Column(String(500), nullable=True)  # Reason for failure if applicable

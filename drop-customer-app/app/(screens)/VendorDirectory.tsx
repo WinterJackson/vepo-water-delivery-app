@@ -1,5 +1,5 @@
-import React, { useContext, useState } from 'react';
-import { View, Text, ScrollView, StatusBar, Image } from 'react-native';
+import React, { useContext, useState, useMemo } from 'react';
+import { View, Text, ScrollView, StatusBar, Image, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { UIThemeContext } from '@/context/ThemeContext';
@@ -12,6 +12,7 @@ import { estimateDeliveryTime } from '@/utils/distance';
 import { useUserDetails } from '@/hooks/queries/useUser';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
 import { VendorCardSkeleton } from '@/components/skeletons/ContextualSkeletons';
+import { useDebounce } from '@/hooks/useDebounce';
 import { FlashList } from '@shopify/flash-list';
 import MapView, { Marker, UrlTile, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Ionicons } from "@expo/vector-icons";
@@ -31,20 +32,33 @@ export default function VendorDirectory() {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState('all');
+    
+    const debouncedSearchQuery = useDebounce(searchQuery, 500);
 
-    const { data: vendors, isLoading } = useVendorDirectory();
+    const mapRef = React.useRef<MapView>(null);
 
-    const filteredVendors = React.useMemo(() => {
-        if (!vendors) return [];
-        let result = vendors;
-        if (filter !== 'all') {
-            result = result.filter((v: import("@/types/models").Vendor) => v.vendor_type === filter);
+    const { data: vendors, isLoading } = useVendorDirectory(debouncedSearchQuery, filter);
+
+    const filteredVendors = vendors || [];
+
+    React.useEffect(() => {
+        if (filteredVendors.length > 0 && mapRef.current) {
+            const coords = filteredVendors
+                .filter((v: any) => v.lat && v.lng)
+                .map((v: any) => ({ latitude: Number(v.lat), longitude: Number(v.lng) }));
+                
+            if (User?.lat && User?.lng) {
+                coords.push({ latitude: Number(User.lat), longitude: Number(User.lng) });
+            }
+
+            if (coords.length > 0) {
+                mapRef.current.fitToCoordinates(coords, {
+                    edgePadding: { top: 50, right: 50, bottom: 50, left: 50 },
+                    animated: true,
+                });
+            }
         }
-        if (searchQuery.trim()) {
-            result = result.filter((v: import("@/types/models").Vendor) => v.business_name.toLowerCase().includes(searchQuery.toLowerCase()));
-        }
-        return result;
-    }, [vendors, filter, searchQuery]);
+    }, [filteredVendors, User]);
 
     const renderVendor = ({ item }: { item: any }) => {
         const isWholesale = item.vendor_type === 'wholesale_b2b';
@@ -114,12 +128,15 @@ export default function VendorDirectory() {
             {/* Map Area */}
             <View className="h-56 relative overflow-hidden" style={{ backgroundColor: darkTheme ? '#1f2937' : '#e5e7eb' }}>
                 <MapView
+                    ref={mapRef}
                     // 🟢 FREE OPEN SOURCE MVP MODE 
                     // Uncomment this block for MVP:
-                    provider={undefined}
+                    // provider={undefined}
                     // 🔴 PRODUCTION GOOGLE MAPS MODE 
                     // Uncomment this block for Production:
-                    // provider={PROVIDER_GOOGLE}
+                    provider={PROVIDER_GOOGLE}
+                    // @ts-ignore
+                    mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
                     style={{ flex: 1 }}
                     initialRegion={{
                         latitude: User?.lat || -1.2921,
@@ -130,30 +147,37 @@ export default function VendorDirectory() {
                 >
                     {/* 🟢 FREE OPEN SOURCE MVP MODE */}
                     {/* Uncomment this block for MVP: */}
-                    {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />}
+                    {/* {UrlTile && <UrlTile urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} maximumZ={20} />} */}
 
-                    {/* User Marker */}
-                    {User?.lat && User?.lng && (
-                        <Marker
-                            coordinate={{ latitude: User.lat, longitude: User.lng }}
-                            title="You are here"
-                            pinColor={BRAND.primary}
-                        />
-                    )}
-                    {/* Vendor Markers */}
-                    {filteredVendors.map((vendor: import("@/types/models").Vendor) => {
-                        if (!vendor.lat || !vendor.lng) return null;
-                        return (
-                            <Marker
-                                key={vendor.id}
-                                coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}
-                                title={vendor.business_name}
-                                description={vendor.vendor_type === 'wholesale_b2b' ? 'Wholesale Vendor' : 'Retail Vendor'}
-                                pinColor={BRAND.primary}
-                                onPress={() => router.push(`/vendor/${vendor.id}`)}
-                            />
-                        );
-                    })}
+                    {useMemo(() => {
+                        const overlays = [];
+                        if (User?.lat && User?.lng) {
+                            overlays.push(
+                                <Marker
+                                    key="user-marker"
+                                    coordinate={{ latitude: User.lat, longitude: User.lng }}
+                                    title="You are here"
+                                    pinColor={BRAND.primary}
+                                />
+                            );
+                        }
+                        
+                        filteredVendors.forEach((vendor: import("@/types/models").Vendor) => {
+                            if (!vendor.lat || !vendor.lng) return;
+                            overlays.push(
+                                <Marker
+                                    key={vendor.id}
+                                    coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}
+                                    title={vendor.business_name}
+                                    description={vendor.vendor_type === 'wholesale_b2b' ? 'Wholesale Vendor' : 'Retail Vendor'}
+                                    pinColor={BRAND.primary}
+                                    onPress={() => router.push(`/vendor/${vendor.id}`)}
+                                />
+                            );
+                        });
+                        
+                        return overlays;
+                    }, [User?.lat, User?.lng, filteredVendors])}
                 </MapView>
             </View>
 

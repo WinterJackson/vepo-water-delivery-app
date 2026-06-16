@@ -6,8 +6,7 @@ import { useContext, useState } from "react";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { Toast } from "@/lib/toast";
 import * as Haptics from "expo-haptics";
-import {
-    Alert, KeyboardAvoidingView, Platform,
+import { KeyboardAvoidingView, Platform,
     ScrollView, StatusBar,
     Text, TextInput, View,
 } from "react-native";

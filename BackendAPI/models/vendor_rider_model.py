@@ -19,6 +19,9 @@ class VendorRiderRegistry(Base):
     status = Column(String(20), nullable=False, default="pending")  # pending, approved, rejected, suspended
     priority = Column(Integer, default=1)
     
+    pending_10L_empties = Column(Integer, nullable=False, default=0)
+    pending_20L_empties = Column(Integer, nullable=False, default=0)
+    
     # H3 hex index referencing the origin zone this rider/vendor bind acts in.
     # At resolution 9, hex edge length is ~174m (area is ~0.10 sq km)
     # At resolution 8, hex edge is ~461m (area is ~0.73 sq km) -> suitable for hyper local routing filtering.

@@ -530,16 +530,17 @@ async def dispatch_order_to_riders(
         logger.error(f"Dispatch Tier 2 error for order {order_id}: {e}")
 
 
-async def create_order(session: AsyncSession, CheckoutRequestID: str, id: UUID, user_id: UUID, phone: str, type: str, lat: float, lng: float, delivery_type: str = "quick_swap"):
+async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id: UUID, user_id: UUID, phone: str, type: str, lat: float, lng: float, delivery_type: str = "quick_swap", payment_method: str = "mpesa"):
   # --- Idempotency Guard: Prevent duplicate STK push double-charges ---
-  existing_order = await session.execute(
-      select(Order).where(Order.checkout_request_ID == CheckoutRequestID).limit(1)
-  )
-  if existing_order.scalar_one_or_none():
-      raise HTTPException(
-          status_code=409,
-          detail="This payment request has already been processed. Please refresh your orders."
+  if CheckoutRequestID:
+      existing_order = await session.execute(
+          select(Order).where(Order.checkout_request_ID == CheckoutRequestID).limit(1)
       )
+      if existing_order.scalar_one_or_none():
+          raise HTTPException(
+              status_code=409,
+              detail="This payment request has already been processed. Please refresh your orders."
+          )
 
   # --- Debt Intercept: Block checkout if customer has outstanding bottle debts ---
   user_check = await session.get(User, user_id)
@@ -715,7 +716,8 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str, id: UUID, 
         delivery_time = delivery["estimated_minutes"],
         is_welcome_offer = is_welcome,
         delivery_type=delivery_type,
-        bottle_source="platform" if is_welcome else "own"
+        bottle_source="platform" if is_welcome else "own",
+        payment_method=payment_method
       )
       session.add(order)
       await session.flush()
@@ -889,6 +891,33 @@ async def get_last_completed_order(session: AsyncSession, user_id: UUID) -> Base
     result = await session.execute(query)
     order = result.unique().scalar_one_or_none()
     return order
+
+async def get_active_order(session: AsyncSession, user_id: UUID) -> BaseOrder | None:
+    """Fetch the customer's current active order for the home screen banner."""
+    query = (
+        select(Order)
+        .where(
+            Order.customer_id == user_id,
+            Order.order_status.in_(["pending", "accepted", "preparing", "ready", "picked_up", "in_transit", "mismatch_pending"])
+        )
+        .options(joinedload(Order.order_item).joinedload(OrderItem.product))
+        .order_by(Order.created_at.desc())
+        .limit(1)
+    )
+    result = await session.execute(query)
+    order = result.unique().scalar_one_or_none()
+    return order
+
+async def fetch_order_tracking_logs(session: AsyncSession, order_id: UUID):
+    """Fetch historical tracking logs for an order to draw the polyline."""
+    from models.order_tracking_log_model import OrderTrackingLog
+    query = (
+        select(OrderTrackingLog)
+        .where(OrderTrackingLog.order_id == order_id)
+        .order_by(OrderTrackingLog.created_at.asc())
+    )
+    result = await session.execute(query)
+    return result.scalars().all()
 
 async def cancel_customer_order(session: AsyncSession, user_id: UUID, order_id: UUID):
     """Customer cancels their own order before preparation"""

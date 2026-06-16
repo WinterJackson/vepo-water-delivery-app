@@ -1,3 +1,4 @@
+import h3
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from models.vendor_model import Vendor
@@ -23,6 +24,8 @@ async def create_vendor(db: AsyncSession, data: CreateVendor):
         lng=data.lng,
         verification_status="pending"
     )
+    if data.lat is not None and data.lng is not None:
+        new_vendor.h3_index_res8 = str(h3.latlng_to_cell(data.lat, data.lng, 8))
     if data.shift_start is not None:
         new_vendor.shift_start = data.shift_start
     if data.shift_end is not None:

@@ -27,6 +27,7 @@ import { useRiderStore } from "@/stores/useRiderStore";
 import { trackEvent } from "@/utils/analytics";
 import { useRiderProfile } from "@/hooks/queries/useRiderData";
 import { Popup } from "@/lib/popup";
+import { useDebounce } from "@/hooks/useDebounce";
 import { RiderOrderCardSkeleton, RiderTripRadarSkeleton } from "@/components/skeletons/ContextualSkeletons";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -55,6 +56,7 @@ export default function Orders() {
   const riderId = useRiderStore((s) => s.riderId);
   const [tab, setTab] = useState<"Incoming" | "History">("Incoming");
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [claimingOrder, setClaimingOrder] = useState<string | null>(null);
 
   const { mutateAsync: rejectDelivery, isPending: isRejecting } = useRejectDelivery();
@@ -116,13 +118,10 @@ export default function Orders() {
   useEffect(() => { fetchOrders(); }, []);
 
   useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery.trim().length > 1) {
-        trackEvent('rider_orders_search', { query: searchQuery.trim(), count: filteredOrders.length });
-      }
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, filteredOrders.length]);
+    if (debouncedSearchQuery.trim().length > 1) {
+      trackEvent('rider_orders_search', { query: debouncedSearchQuery.trim() });
+    }
+  }, [debouncedSearchQuery]);
 
   const handleAcceptRadar = async (orderId: string) => {
     if (claimingOrder) return;

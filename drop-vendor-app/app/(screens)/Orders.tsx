@@ -20,7 +20,9 @@ import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useUpdateOrderStatus, useVendorOrdersPaginated } from "@/hooks/queries/useVendorOrders";
 import { useDashboard } from "@/hooks/queries/useDashboard";
+import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
 import useWebSocket from "@/hooks/useWebSocket";
+import { useDebounce } from "@/hooks/useDebounce";
 import { trackEvent } from "@/utils/analytics";
 import SearchBar from "@/components/common/Search";
 import { ScrollView } from "react-native-gesture-handler";
@@ -36,6 +38,8 @@ const STATUS_COLORS: Record<string, string> = {
   picked_up: "bg-blue-500/20",
   delivered: "bg-green-500/20",
   cancelled: "bg-red-500/20",
+  refund_pending: "bg-orange-500/20",
+  refunded: "bg-slate-500/20",
 };
 
 const STATUS_TEXT: Record<string, string> = {
@@ -49,10 +53,18 @@ const STATUS_TEXT: Record<string, string> = {
   picked_up: "text-blue-600",
   delivered: "text-green-600",
   cancelled: "text-red-600",
+  refund_pending: "text-orange-600",
+  refunded: "text-slate-600",
 };
 
 // Memoized order item to prevent unnecessary re-renders during WebSocket updates
-const OrderItem = memo(({ item, darkTheme, updatingOrder, onUpdateStatus, router }: any) => {
+const OrderItem = memo(({ item, darkTheme, updatingOrder, onUpdateStatus, router, vendorProfile }: any) => {
+  const isWholesale = vendorProfile?.vendor_type === "wholesale_b2b";
+  const isCash = item.payment_method === "cash";
+  const platformCommission = item.platform_total || 0;
+  const walletBalance = vendorProfile?.wallet_balance || 0;
+  const isInsufficientFloat = isWholesale && isCash && walletBalance < platformCommission;
+
   return (
     <PressableScale 
       activeOpacity={0.7}
@@ -96,23 +108,44 @@ const OrderItem = memo(({ item, darkTheme, updatingOrder, onUpdateStatus, router
       )}
 
       {item.order_status === "pending" && (
-        <View className="flex-row gap-3 mt-4">
-          <PressableScale
-            onPress={() => onUpdateStatus(item.id, "accepted")}
-            activeOpacity={0.8}
-            disabled={updatingOrder === item.id}
-            className={`flex-1 ${updatingOrder === item.id ? "bg-accentbg/60" : "bg-accentbg"} py-4 rounded-[16px] items-center`}
-          >
-            <Text className="text-white font-bold text-base">{updatingOrder === item.id ? "..." : "Accept"}</Text>
-          </PressableScale>
-          <PressableScale
-            onPress={() => onUpdateStatus(item.id, "rejected")}
-            activeOpacity={0.8}
-            disabled={updatingOrder === item.id}
-            className={`flex-1 ${updatingOrder === item.id ? "bg-red-50" : "bg-red-500/10"} border border-red-500/20 py-4 rounded-[16px] items-center`}
-          >
-            <Text className="text-red-600 font-bold text-base">{updatingOrder === item.id ? "..." : "Reject"}</Text>
-          </PressableScale>
+        <View className="mt-4">
+          {isWholesale && isCash && (
+            <View className={`p-3 rounded-xl border mb-3 ${darkTheme ? "bg-amber-900/20 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+               <View className="flex-row items-center mb-1">
+                 <Ionicons name="warning" size={16} color="#f59e0b" style={{ marginRight: 6 }} />
+                 <Text className={`font-bold text-xs ${darkTheme ? "text-amber-500" : "text-amber-700"}`}>Cash Order (Wholesale)</Text>
+               </View>
+               <Text className={`text-xs ${darkTheme ? "text-amber-200/70" : "text-amber-700/80"}`}>
+                 Commission to deduct: <Text className="font-bold">KSH {platformCommission.toFixed(2)}</Text>
+               </Text>
+               {isInsufficientFloat && (
+                 <Text className="text-red-500 text-xs font-bold mt-1">
+                   Shortfall: KSH {(platformCommission - walletBalance).toFixed(2)}. Please top up.
+                 </Text>
+               )}
+            </View>
+          )}
+
+          <View className="flex-row gap-3">
+            <PressableScale
+              onPress={() => onUpdateStatus(item.id, "accepted")}
+              activeOpacity={0.8}
+              disabled={updatingOrder === item.id || isInsufficientFloat}
+              className={`flex-1 ${updatingOrder === item.id || isInsufficientFloat ? "bg-accentbg/60" : "bg-accentbg"} py-4 rounded-[16px] items-center`}
+            >
+              <Text className={`font-bold text-base ${isInsufficientFloat ? "text-white/60" : "text-white"}`}>
+                {updatingOrder === item.id ? "..." : isInsufficientFloat ? "Insufficient Float" : "Accept"}
+              </Text>
+            </PressableScale>
+            <PressableScale
+              onPress={() => onUpdateStatus(item.id, "rejected")}
+              activeOpacity={0.8}
+              disabled={updatingOrder === item.id}
+              className={`flex-1 ${updatingOrder === item.id ? "bg-red-50" : "bg-red-500/10"} border border-red-500/20 py-4 rounded-[16px] items-center`}
+            >
+              <Text className="text-red-600 font-bold text-base">{updatingOrder === item.id ? "..." : "Reject"}</Text>
+            </PressableScale>
+          </View>
         </View>
       )}
       {item.order_status === "accepted" && (
@@ -145,6 +178,7 @@ export default function Orders() {
   const darkTheme = currentTheme === "dark";
 
   const [searchQuery, setSearchQuery] = useState("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
   const [searchState, setSearchState] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [updatingOrder, setUpdatingOrder] = useState<string | null>(null);
@@ -159,6 +193,7 @@ export default function Orders() {
   
   const { mutateAsync: updateStatusMutation } = useUpdateOrderStatus();
   const { data: dashboard } = useDashboard();
+  const { data: vendorProfile } = useVendorProfile();
   const vendorId = dashboard?.vendor_id;
 
   const filteredOrders = ordersData?.pages?.flatMap(page => page) || [];
@@ -170,16 +205,13 @@ export default function Orders() {
   });
 
   React.useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (searchQuery.trim().length > 1) {
-        setSearchState(searchQuery.trim());
-        trackEvent('vendor_orders_search', { query: searchQuery.trim(), count: filteredOrders.length });
-      } else {
-        setSearchState("");
-      }
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [searchQuery, filteredOrders.length]);
+    if (debouncedSearchQuery.trim().length > 1) {
+      setSearchState(debouncedSearchQuery.trim());
+      trackEvent('vendor_orders_search', { query: debouncedSearchQuery.trim() });
+    } else {
+      setSearchState("");
+    }
+  }, [debouncedSearchQuery]);
 
   const updateStatus = useCallback(async (orderId: string, status: string) => {
     if (updatingOrder === orderId) return;
@@ -206,9 +238,10 @@ export default function Orders() {
         updatingOrder={updatingOrder} 
         onUpdateStatus={updateStatus}
         router={router}
+        vendorProfile={vendorProfile}
       />
     );
-  }, [darkTheme, updatingOrder, updateStatus, router]);
+  }, [darkTheme, updatingOrder, updateStatus, router, vendorProfile]);
 
   return (
     <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>

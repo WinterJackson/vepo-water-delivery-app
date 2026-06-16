@@ -23,7 +23,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.drop.vendor",
       "config": {
-        "googleMapsApiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+        "googleMapsApiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
       }
     },
     "android": {
@@ -33,7 +33,7 @@
       "package": "com.drop.vendor",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+          "apiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
         }
       },
       "permissions": [

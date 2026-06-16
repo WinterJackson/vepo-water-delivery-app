@@ -22,7 +22,7 @@
     "ios": {
       "supportsTablet": true,
       "config": {
-        "googleMapsApiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+        "googleMapsApiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
       },
       "bundleIdentifier": "com.drop.customer",
       "infoPlist": {
@@ -36,7 +36,7 @@
       "package": "com.drop.customer",
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyAivt8k07bkgfAKLSGUpcEWdJggOhNpG4k"
+          "apiKey": "AIzaSyD9R6-hmSRZwjEuWj_8CPRzZipXtJ6MMAI"
         }
       },
       "permissions": [

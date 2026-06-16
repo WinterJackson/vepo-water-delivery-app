@@ -28,7 +28,15 @@ CATEGORY_METADATA = [
 @router.get("/categories")
 async def get_categories():
     """Returns all available product categories with metadata for the UI."""
-    return {"categories": CATEGORY_METADATA}
+    from core.redis_client import cache_get, cache_set
+    cache_key = "product_categories_metadata"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
+    result = {"categories": CATEGORY_METADATA}
+    await cache_set(cache_key, result, ttl_seconds=86400) # Cache for 24 hours
+    return result
 
 
 @router.get("/products-by-category")
@@ -39,7 +47,15 @@ async def get_products_by_category(
     db: AsyncSession = Depends(get_db)
 ):
     """Filter products by Kenya market category with pagination."""
+    from core.redis_client import cache_get, cache_set
+    cache_key = f"products_by_cat:{category}:{limit}:{offset}"
+    cached = await cache_get(cache_key)
+    if cached:
+        return cached
+
     products = await fetch_products_by_category(session=db, category=category, limit=limit, offset=offset)
+    
+    await cache_set(cache_key, products, ttl_seconds=300) # 5 mins
     return products
 
 
@@ -50,8 +66,17 @@ async def get_product(request_body: RequestBodyProductId, db : AsyncSession =  D
 
 @router.get("/products_with_discount")
 async def get_products_with_offer(db: AsyncSession = Depends(get_db), limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0)):
+  from core.redis_client import cache_get, cache_set
+  cache_key = f"products_with_discount:{limit}:{offset}"
+  cached = await cache_get(cache_key)
+  if cached:
+      return cached
+
   products = await fetch_products_with_offer(session=db, limit=limit, offset=offset)
-  return {"data": products, "limit": limit, "offset": offset}
+  result = {"data": products, "limit": limit, "offset": offset}
+  
+  await cache_set(cache_key, result, ttl_seconds=300) # 5 mins
+  return result
 
 
 @router.post("/random_paginated_products")

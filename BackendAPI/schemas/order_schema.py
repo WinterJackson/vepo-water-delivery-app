@@ -1,7 +1,9 @@
 from pydantic import BaseModel
 from uuid import UUID
 from decimal import Decimal
-from schemas.product_schemas import ProductFull
+from schemas.user_schemas import CustomerPublicProfile
+from schemas.vendor_schemas import BaseVendor
+from schemas.product_schemas import ProductFull, OrderProductDetail
 from typing import List, Optional
 from datetime import datetime
 
@@ -13,7 +15,7 @@ class OrderItemBase(BaseModel):
   quantity: int
   price: float
   Subtotal: float
-  product: Optional[ProductFull]
+  product: Optional[OrderProductDetail]
   
   model_config = {"from_attributes": True}
 
@@ -50,3 +52,17 @@ class BaseOrder(BaseModel):
   updated_at: datetime | None
 
   model_config = {"from_attributes": True}
+
+
+class OrderWithDetails(BaseOrder):
+    user: Optional[CustomerPublicProfile] = None
+    vendor: Optional[BaseVendor] = None
+    
+    model_config = {"from_attributes": True}
+
+
+class PaginatedOrders(BaseModel):
+    pages: List[List[OrderWithDetails]]
+    
+    model_config = {"from_attributes": True}
+

@@ -35,7 +35,7 @@ export default function ActiveTripCard({ order }: ActiveTripCardProps) {
               </Text>
             </View>
             <Text className={`font-bold ${darkTheme ? "text-white" : "text-black"}`}>
-              KSH {order.total_price.toLocaleString()}
+              KSH {Number(order?.total_amount ?? 0).toString()}
             </Text>
           </View>
           

@@ -38,7 +38,7 @@ async def test_create_order_with_no_deliverer_sets_unassigned():
     cart_item.vendor = MagicMock(
         id=vendor_id, lat=-1.28, lng=36.82,
         vendor_type="retail_refill", deposit_fee=Decimal("50"),
-        location=MagicMock(),
+        location=MagicMock(), clerk_id="vendor_clerk"
     )
     cart_item.product = MagicMock(
         stock=10, name="Water 20L", weight_kg=20.0, vendor_id=vendor_id
@@ -51,6 +51,10 @@ async def test_create_order_with_no_deliverer_sets_unassigned():
     mock_user.has_used_welcome_offer = True
     mock_user.empty_bottles_held = 0
     mock_user.push_token = None
+    mock_user.clerk_id = "user_clerk"
+    mock_user.floor_level = 0
+    mock_user.has_elevator = False
+    mock_user.wallet_balance = Decimal("0")
 
     # 1st execute: Idempotency guard → None (no duplicate)
     mock_idempotency_result = MagicMock()
@@ -68,8 +72,20 @@ async def test_create_order_with_no_deliverer_sets_unassigned():
         side_effect=[mock_idempotency_result, mock_cart_result, mock_update_result]
     )
 
-    # session.get returns mock_user for User lookups
-    mock_session.get = AsyncMock(return_value=mock_user)
+    mock_vendor = MagicMock()
+    mock_vendor.vendor_type = MagicMock()
+    mock_vendor.vendor_type.value = "retail_refill"
+    mock_vendor.clerk_id = "vendor_clerk"
+    mock_vendor.staff_clerk_id = None
+    
+    async def mock_get(model, id):
+        if model.__name__ == 'User':
+            return mock_user
+        if model.__name__ == 'Vendor':
+            return mock_vendor
+        return None
+
+    mock_session.get = AsyncMock(side_effect=mock_get)
     # session.flush is needed for order ID generation
     mock_session.flush = AsyncMock()
 

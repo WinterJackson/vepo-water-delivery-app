@@ -11,9 +11,9 @@ from pydantic import BaseModel
 from routes import (
     vendor_routes, auth_routes, product_routes, cart_routes,
     query_routes, vendor_management_routes, deliverer_routes,
-    websocket_routes, review_routes, payout_routes, sync_routes, sms_routes,
+    websocket_routes, review_routes, sync_routes, sms_routes,
     favorites_routes, notification_routes, delivery_fee_routes, refund_routes,
-    vendor_remittance_routes, vendor_favorites_routes, saved_location_routes
+    vendor_favorites_routes, saved_location_routes, wallet_routes
 )
 import models
 from db.session import create_table
@@ -36,11 +36,60 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'none';"
         return response
 
-# --- Logging Configuration ---
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+# --- Observability Initialization ---
+import sentry_sdk
+from prometheus_fastapi_instrumentator import Instrumentator
+from asgi_correlation_id import CorrelationIdMiddleware, correlation_id
 
-app = FastAPI(title="Drop Water Delivery API", version="1.0.0")
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )
+
+# --- Logging Configuration ---
+# Add correlation ID to log format
+log_format = "%(asctime)s - %(name)s - %(levelname)s - [%(correlation_id)s] - %(message)s"
+logging.basicConfig(level=logging.INFO, format=log_format)
+
+# Add a filter to inject correlation ID into all log records
+class CorrelationIdFilter(logging.Filter):
+    def filter(self, record):
+        record.correlation_id = correlation_id.get() or "no-req-id"
+        return True
+
+logger = logging.getLogger(__name__)
+# Add the filter to the root logger
+for handler in logging.root.handlers:
+    handler.addFilter(CorrelationIdFilter())
+
+import re
+class TokenRedactFilter(logging.Filter):
+    def filter(self, record):
+        if isinstance(record.args, tuple):
+            new_args = list(record.args)
+            for i, arg in enumerate(new_args):
+                if isinstance(arg, str) and "token=" in arg:
+                    new_args[i] = re.sub(r"token=[^&\s'\"]+", "token=***", arg)
+            record.args = tuple(new_args)
+        return True
+
+# Apply the filter to the uvicorn.access logger to prevent token leaking in terminal
+logging.getLogger("uvicorn.access").addFilter(TokenRedactFilter())
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from routes.websocket_routes import manager
+    await manager.start_pubsub()
+    yield
+    if manager.pubsub_task:
+        manager.pubsub_task.cancel()
+
+app = FastAPI(title="Drop Water Delivery API", version="1.0.0", lifespan=lifespan)
 
 # --- F-011 FIX: Health Check Endpoint ---
 @app.get("/health", tags=["Health"])
@@ -62,6 +111,8 @@ from fastapi.responses import JSONResponse
 @app.exception_handler(Exception)
 async def global_exception_handler(request: FastAPIRequest, exc: Exception):
     logger.error(f"Unhandled exception on {request.method} {request.url.path}: {exc}", exc_info=True)
+    if sentry_dsn:
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=500,
         content={"detail": "Internal server error. Please try again later."},
@@ -78,8 +129,8 @@ async def validation_exception_handler(request: FastAPIRequest, exc: RequestVali
     )
 
 # --- Rate Limiter ---
-limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
-app.state.limiter = limiter
+from core.redis_client import redis_limiter
+app.state.limiter = redis_limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
 
@@ -109,8 +160,14 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 # Trust Proxy Headers (Critical for Safaricom IP whitelisting on Render/Heroku)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
 
+# Add Correlation ID Middleware
+app.add_middleware(CorrelationIdMiddleware)
+
 # Apply Security Headers Middleware
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Expose Prometheus Metrics
+Instrumentator().instrument(app).expose(app)
 
 # --- Customer-facing Routes ---
 app.include_router(vendor_routes.router, prefix="/api")
@@ -141,11 +198,11 @@ app.include_router(review_routes.router, prefix="/api/reviews", tags=["Reviews"]
 app.include_router(favorites_routes.router, prefix="/api/favorites", tags=["Favorites"])
 app.include_router(vendor_favorites_routes.router, prefix="/api/vendor-favorites", tags=["Vendor Favorites"])
 app.include_router(notification_routes.router, prefix="/api/notifications", tags=["Notifications"])
-app.include_router(payout_routes.router, prefix="/api/payouts", tags=["Payouts"])
+    # Legacy payouts removed
 app.include_router(refund_routes.router, prefix="/api/refunds", tags=["Refunds"])
 app.include_router(sync_routes.router, prefix="/api/sync", tags=["Sync"])
 app.include_router(sms_routes.router, prefix="/api/sms", tags=["SMS Fallback"])
-app.include_router(vendor_remittance_routes.router, prefix="/api/vendor_remittance", tags=["VendorRemittance"])
+app.include_router(wallet_routes.router)
 from routes import contact_routes
 app.include_router(contact_routes.router, prefix="/api", tags=["Contacts"])
 

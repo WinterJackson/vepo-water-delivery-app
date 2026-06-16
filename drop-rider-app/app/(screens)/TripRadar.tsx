@@ -4,6 +4,7 @@ import useWebSocket from "@/hooks/useWebSocket";
 import { useRiderStore } from "@/stores/useRiderStore";
 import { useAuth } from "@clerk/clerk-expo";
 import React, { useContext, useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useRiderProfile } from "@/hooks/queries/useRiderData";
 import {
   FlatList,
   RefreshControl,
@@ -14,6 +15,7 @@ import {
   ScrollView,
   ActivityIndicator,
   StatusBar,
+  Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BRAND, TOAST } from "@/constants/brandColors";
@@ -24,7 +26,7 @@ import { Toast } from "@/lib/toast";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet, { BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from "react-native-maps";
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE } from "react-native-maps";
 import { DataFallbackUI } from "@/components/ui/DataFallbackUI";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +40,7 @@ interface RadarOrder {
   items_count: number;
   weight_kg: number;
   delivery_type: "quick_swap" | "keep_my_bottle";
+  payment_method: "cash" | "mpesa";
   vehicle_class: string;
   vendor?: {
     business_name: string;
@@ -69,6 +72,9 @@ export default function TripRadar() {
   const [loading, setLoading] = useState(true);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
 
+  const { data: profile } = useRiderProfile();
+  const walletBalance = profile?.wallet_balance || 0;
+
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("ALL");
@@ -83,7 +89,7 @@ export default function TripRadar() {
     const token = await getToken();
     if (!token) return;
     try {
-      const route = RiderApiRoutes.GetOrders().path.replace("/orders", "/trip-radar");
+      const route = RiderApiRoutes.TripRadar.path;
       const res = await fetch(route, {
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       });
@@ -104,7 +110,8 @@ export default function TripRadar() {
     } finally {
       setLoading(false);
     }
-  }, [getToken, mutedVendors]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mutedVendors]);
 
   // ── WebSocket for real-time radar updates ────────────────────────────
   const { connected } = useWebSocket("rider", riderId || "", (updateData) => {
@@ -128,6 +135,7 @@ export default function TripRadar() {
           items_count: updateData.items_count || updateData.quantity || 0,
           weight_kg: updateData.weight_kg || 0,
           delivery_type: updateData.delivery_type || "quick_swap",
+          payment_method: updateData.payment_method || "mpesa",
           vehicle_class: updateData.vehicle_class || "motorbike",
           vendor: updateData.vendor,
           delivery_location: updateData.delivery_location,
@@ -432,7 +440,9 @@ export default function TripRadar() {
       <View className={`flex-1 ${darkTheme ? "bg-surface" : "bg-white"}`}>
         <View className={`h-[250px] w-full ${darkTheme ? "bg-gray-800" : "bg-white"}`}>
           <MapView
-            provider={PROVIDER_DEFAULT}
+            provider={Platform.OS !== 'web' ? PROVIDER_GOOGLE : undefined}
+            // @ts-ignore
+            mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
             style={{ flex: 1 }}
             initialRegion={initialRegion}
             showsUserLocation={false}
@@ -519,18 +529,43 @@ export default function TripRadar() {
             </View>
           </View>
 
+          {selectedOrder.payment_method === "cash" && (
+            <View className={`p-4 rounded-xl border mb-6 ${darkTheme ? "bg-amber-900/20 border-amber-500/30" : "bg-amber-50 border-amber-200"}`}>
+               <View className="flex-row items-center mb-2">
+                 <Ionicons name="warning" size={20} color="#f59e0b" style={{ marginRight: 8 }} />
+                 <Text className={`font-bold text-sm ${darkTheme ? "text-amber-500" : "text-amber-700"}`}>Cash Order</Text>
+               </View>
+               <Text className={`text-xs mb-2 ${darkTheme ? "text-amber-200/70" : "text-amber-700/80"}`}>
+                 You must have enough funds in your Wallet to cover the platform's commission (KES 20) to accept this cash order.
+               </Text>
+               <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-amber-500/20">
+                 <Text className={`text-xs font-semibold ${darkTheme ? "text-amber-200" : "text-amber-800"}`}>Your Wallet Balance:</Text>
+                 <Text className={`text-sm font-bold ${walletBalance >= 19 ? (darkTheme ? "text-green-400" : "text-green-600") : "text-red-500"}`}>
+                   KSH {walletBalance.toFixed(2)}
+                 </Text>
+               </View>
+               {walletBalance < 19 && (
+                 <Text className="text-red-500 text-xs font-bold mt-2">
+                   Shortfall: KSH {(19 - walletBalance).toFixed(2)}. Please top up or complete cashless orders.
+                 </Text>
+               )}
+            </View>
+          )}
+
           <TouchableOpacity
             onPress={() => acceptOrder(selectedOrder.id)}
-            disabled={acceptingId === selectedOrder.id}
-            className={`py-4 rounded-2xl items-center flex-row justify-center mb-10 ${darkTheme ? "bg-primary" : "bg-primary"}`}
+            disabled={acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)}
+            className={`py-4 rounded-2xl items-center flex-row justify-center mb-10 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "bg-gray-800" : "bg-gray-300") : "bg-primary"}`}
             style={{ elevation: 2, shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
           >
             {acceptingId === selectedOrder.id ? (
               <ActivityIndicator color={BRAND.white} />
             ) : (
               <>
-                <Text className="text-white text-lg font-bold mr-2">Accept Trip</Text>
-                <Ionicons name="checkmark-circle-outline" size={20} color={BRAND.white} />
+                <Text className={`text-lg font-bold mr-2 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "text-gray-500" : "text-gray-500") : "text-white"}`}>
+                  {selectedOrder.payment_method === "cash" && walletBalance < 19 ? "Insufficient Float" : "Accept Trip"}
+                </Text>
+                <Ionicons name={(selectedOrder.payment_method === "cash" && walletBalance < 19) ? "lock-closed" : "checkmark-circle-outline"} size={20} color={(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "#6b7280" : "#6b7280") : BRAND.white} />
               </>
             )}
           </TouchableOpacity>

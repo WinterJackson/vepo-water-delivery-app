@@ -161,20 +161,14 @@ export default function LiveMap() {
                 {MapView ? (
                     <MapView
                         ref={mapRef}
-                        provider={undefined}
+                        provider={PROVIDER_GOOGLE}
+                        mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
                         style={StyleSheet.absoluteFill}
                         initialRegion={initialRegion}
-                        customMapStyle={darkTheme ? darkMapStyle : standardMapStyle}
                         showsUserLocation={true}
                         showsMyLocationButton={false}
                         showsCompass={false}
                     >
-                        {UrlTile && (
-                            <UrlTile 
-                                urlTemplate={darkTheme ? "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png" : "https://a.basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"} 
-                                maximumZ={20} 
-                            />
-                        )}
 
                         {/* Customer Location */}
                         {activeOrder.lat && activeOrder.lng && (

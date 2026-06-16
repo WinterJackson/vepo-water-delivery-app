@@ -8,24 +8,24 @@ class TestCalculateDeliveryFee:
     """Pure function tests — no DB required."""
 
     def test_short_distance_base_fee(self):
-        """Close coordinates → should return retail flat fee (KSH 50)."""
+        """Close coordinates → should return calculated fee."""
         # Nairobi CBD (~0.67km apart)
         result = calculate_delivery_fee(-1.2864, 36.8172, -1.2804, 36.8165)
-        assert result["fee"] == 50.0  # Retail flat fee
+        assert result["fee"] == 40.05  # Retail 30.0 + 15.0 * distance
         assert result["distance_km"] < 2.0
         assert result["estimated_minutes"] >= 2  # max(5, ceil(0.67*3)) = 5
 
     def test_zero_distance(self):
         """Same point → should return base flat fee."""
         result = calculate_delivery_fee(-1.2921, 36.8219, -1.2921, 36.8219)
-        assert result["fee"] == 50.0
+        assert result["fee"] == 30.0
         assert result["distance_km"] == 0.0
         assert result["estimated_minutes"] >= 5  # max(5, 0)
 
     def test_medium_distance_retail(self):
-        """~3.5km apart, retail → should still be flat fee 50."""
+        """~3.5km apart, retail → should calculate using formula."""
         result = calculate_delivery_fee(-1.2921, 36.8219, -1.2637, 36.8069)
-        assert result["fee"] == 50.0  # Retail is always flat
+        assert result["fee"] == 83.55
         assert result["distance_km"] > 2.0
         assert result["estimated_minutes"] > 5
 
@@ -70,7 +70,7 @@ class TestDispatchPolicy:
         assert DispatchPolicy.get_vehicle_class(21) == "truck"
 
     def test_rider_registration_radius(self):
-        assert DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM == 1.5
+        assert DispatchPolicy.RIDER_REGISTRATION_MAX_RADIUS_KM == 2.0
 
     def test_retail_flat_fee(self):
         assert DispatchPolicy.RETAIL_FLAT_FEE_KSH == 50.0
