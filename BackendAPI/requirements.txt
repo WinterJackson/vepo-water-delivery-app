@@ -58,6 +58,7 @@ redis>=5.0.0
 resend
 slowapi
 boto3
+sqlalchemy-utils
 alembic
 pytest
 pytest-asyncio
