@@ -44,10 +44,16 @@ async def flush_gps_tracking_logs_task(ctx):
     await flush_tracking_logs()
     return "Flushed tracking logs"
 
+async def auto_resolve_bottle_rejections_task(ctx):
+    from jobs.auto_resolve_bottle_rejections import run_auto_resolve_bottle_rejections
+    await run_auto_resolve_bottle_rejections()
+    return "Swept bottle rejections"
+
 class WorkerSettings:
     functions = [
         send_push_message_task,
         flush_gps_tracking_logs_task,
+        auto_resolve_bottle_rejections_task,
     ]
     redis_settings = redis_settings
     on_startup = startup
@@ -59,5 +65,6 @@ class WorkerSettings:
 from arq.cron import cron
 
 WorkerSettings.cron_jobs = [
-    cron(flush_gps_tracking_logs_task, second=set(range(0, 60, 10))) # Runs every 10 seconds
+    cron(flush_gps_tracking_logs_task, second=set(range(0, 60, 10))), # Runs every 10 seconds
+    cron(auto_resolve_bottle_rejections_task, second=0),  # runs every minute; picks up anything past the 3-minute cutoff
 ]

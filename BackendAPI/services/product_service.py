@@ -25,7 +25,7 @@ async def get_product_for_cart(session : AsyncSession, id : UUID) -> BaseProduct
   return product
 
 async def fetch_products_with_offer(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[BaseProduct]:
-  query = select(Product).where(Product.discount > 0).order_by(Product.discount.desc()).offset(offset).limit(limit)
+  query = select(Product).where(Product.discount > 0, Product.is_available == True).order_by(Product.discount.desc()).offset(offset).limit(limit)
   result = await session.execute(query)
   products = result.unique().scalars().all()
   if not products :
@@ -34,7 +34,7 @@ async def fetch_products_with_offer(session: AsyncSession, limit: int = 20, offs
 
 async def fetch_paginated_products(session: AsyncSession, page: int) ->  list[BaseProduct]:
   offset = (page - 1 ) * 16
-  query = select(Product).order_by(Product.created_at.desc()).offset(offset).limit(16)
+  query = select(Product).where(Product.is_available == True).order_by(Product.created_at.desc()).offset(offset).limit(16)
   result = await session.execute(query)
   products = result.scalars().all()
   return products

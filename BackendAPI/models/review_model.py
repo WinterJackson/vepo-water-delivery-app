@@ -6,7 +6,7 @@ from db.session import Base
 class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = (
-        UniqueConstraint('customer_clerk_id', 'order_id', name='uq_customer_order_review'),  # F-007 FIX
+        UniqueConstraint('customer_clerk_id', 'order_id', 'target_type', name='uq_customer_order_target_review'),
         CheckConstraint('rating >= 1 AND rating <= 5', name='ck_review_rating_range'),
     )
 

@@ -9,6 +9,7 @@ import {
     View
 } from "react-native";
 import HorizontalList from "@/components/common/HorizontalList";
+import Reviews from "@/components/common/Reviews";
 import { SkeletonCard } from "@/components/ui/Skeleton";
 import Context from "@/context/context";
 import { UIThemeContext } from "@/context/ThemeContext";
@@ -87,7 +88,6 @@ const VendorDetails = (props: Props) => {
 			await addToCartMutation({
 				id: productId,
 				quantity: 1,
-				user_id: User?.id || "",
 				force_replace: forceReplace,
 			});
 			fetchCart();
@@ -398,6 +398,11 @@ const VendorDetails = (props: Props) => {
 								))}
 							</View>
 						)}
+					</View>
+					
+					{/* <---------------------------------<REVIEWS>---------------------------------> */}
+					<View className="px-5 mt-8 mb-8">
+						<Reviews targetType="vendor" targetId={vendorId as string} />
 					</View>
 				</ScrollView>
 			</View>

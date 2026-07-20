@@ -15,19 +15,24 @@ async def create_review(session: AsyncSession, clerk_id: str, data: ReviewCreate
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
         
-    # Lazy load user via joinedload or direct fetch if needed, 
-    # but order.user_id can be used to query or just query user by clerk_id
     from models.user_model import User
     user = await session.get(User, order.customer_id) if hasattr(order, 'customer_id') else await session.get(User, order.user_id)
     if not user or user.clerk_id != clerk_id:
         raise HTTPException(status_code=403, detail="You can only review orders you have placed.")
         
-    # Anti-Fraud: Self-Rating Prevention
+    if order.order_status != "delivered":
+        raise HTTPException(status_code=400, detail="You can only review orders that have been delivered.")
+
+    # Anti-Fraud: Target Match and Self-Rating Prevention
     if data.target_type == 'vendor':
+        if order.vendor_id is None or str(order.vendor_id) != str(data.target_id):
+            raise HTTPException(status_code=403, detail="You can only review the vendor who fulfilled this order.")
         target = await session.get(Vendor, data.target_id)
         if target and (target.clerk_id == clerk_id or target.staff_clerk_id == clerk_id):
             raise HTTPException(status_code=403, detail="Self-rating prohibited. You cannot review your own store.")
     elif data.target_type == 'rider':
+        if order.deliverer_id is None or str(order.deliverer_id) != str(data.target_id):
+            raise HTTPException(status_code=403, detail="You can only review the rider who delivered this order.")
         target = await session.get(Deliverer, data.target_id)
         if target and target.clerk_id == clerk_id:
             raise HTTPException(status_code=403, detail="Self-rating prohibited. You cannot review your own rider profile.")

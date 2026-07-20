@@ -8,10 +8,25 @@ from models.deliverer_model import Deliverer, KYCStatus
 from dependencies.auth_dependencies import get_current_rider
 from utils.s3_utils import upload_file_to_s3
 
+import logging
+import imghdr
+
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/api/deliverer/kyc",
     tags=["Deliverer KYC"]
 )
+
+ALLOWED_IMAGE_KINDS = {"jpeg", "png"}
+
+async def _validate_upload(file: UploadFile, field_name: str):
+    header_bytes = await file.read(512)
+    await file.seek(0)  # reset the stream so the S3 upload below reads from the start
+    kind = imghdr.what(None, h=header_bytes)
+    is_pdf = header_bytes.startswith(b"%PDF-")
+    if not (kind in ALLOWED_IMAGE_KINDS or is_pdf):
+        raise HTTPException(status_code=400, detail=f"{field_name} must be a genuine JPG, PNG, or PDF file.")
 
 @router.post("/upload")
 async def upload_kyc_documents(
@@ -38,10 +53,8 @@ async def upload_kyc_documents(
     if not deliverer:
         raise HTTPException(status_code=404, detail="Rider profile not found")
 
-    # Validate file types (basic check)
-    allowed_types = ["image/jpeg", "image/png", "image/jpg", "application/pdf"]
-    if id_card_front.content_type not in allowed_types or id_card_back.content_type not in allowed_types:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, PNG, or PDF allowed.")
+    await _validate_upload(id_card_front, "ID card front")
+    await _validate_upload(id_card_back, "ID card back")
 
     # Upload files
     front_url = await upload_file_to_s3(id_card_front, prefix="kyc/id_front")
@@ -54,8 +67,7 @@ async def upload_kyc_documents(
     deliverer.id_card_back = back_url
 
     if driver_license:
-        if driver_license.content_type not in allowed_types:
-            raise HTTPException(status_code=400, detail="Invalid driver license file type.")
+        await _validate_upload(driver_license, "Driver license")
         dl_url = await upload_file_to_s3(driver_license, prefix="kyc/license")
         if dl_url:
             deliverer.driver_license = dl_url
@@ -66,8 +78,13 @@ async def upload_kyc_documents(
     if vehicle_type:
         deliverer.vehicle_type = vehicle_type
 
-    # Set status to pending review
-    deliverer.kyc_status = KYCStatus.pending
+    # Set status to pending review — but only demote from "approved" if this is a genuinely
+    # new submission, not a minor field update on an already-verified rider.
+    if deliverer.kyc_status != KYCStatus.approved:
+        deliverer.kyc_status = KYCStatus.pending
+    else:
+        # Log the change for an admin to spot-check, without interrupting the rider's ability to work.
+        logger.info(f"Rider {deliverer.id} updated KYC documents post-approval; status unchanged.")
     
     await db.commit()
     await db.refresh(deliverer)

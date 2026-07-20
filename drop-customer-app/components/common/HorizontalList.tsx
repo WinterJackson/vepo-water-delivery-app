@@ -50,7 +50,6 @@ const HorizontalList = ({ title, type, data, loaded }: Props) => {
 		addToCartMutation({
 			id: id,
 			quantity: 1,
-			user_id: User?.id || "",
 			force_replace: forceReplace,
 		}, {
 			onSettled: () => {

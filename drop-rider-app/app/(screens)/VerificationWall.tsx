@@ -22,6 +22,7 @@ export default function VerificationWall() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [kycStatus, setKycStatus] = useState("unsubmitted");
+  const [statusError, setStatusError] = useState(false);
 
   const [vehicleType, setVehicleType] = useState("motorbike");
   const [plateNumber, setPlateNumber] = useState("");
@@ -34,6 +35,7 @@ export default function VerificationWall() {
   }, []);
 
   const checkStatus = async () => {
+    setStatusError(false);
     try {
       const token = await getToken();
       // Use the newly created status endpoint
@@ -46,9 +48,12 @@ export default function VerificationWall() {
         if (data.kyc_status === "approved") {
            router.replace("/(screens)");
         }
+      } else {
+        setStatusError(true);
       }
     } catch (e) {
       if (__DEV__) console.log("Error checking KYC status", e);
+      setStatusError(true);
     } finally {
       setLoading(false);
     }
@@ -155,6 +160,21 @@ export default function VerificationWall() {
         <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
             <RiderVerificationSkeleton />
         </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  if (statusError) {
+    return (
+      <SafeAreaView className={`flex-1 items-center justify-center px-8 ${darkTheme ? "bg-[#0A0A0A]" : ""}`}>
+        <StatusBar translucent barStyle={darkTheme ? "light-content" : "dark-content"} />
+        <Ionicons name="cloud-offline-outline" size={48} color={BRAND.primary} />
+        <Text className={`text-lg font-bold mt-4 text-center ${darkTheme ? "text-white" : "text-black"}`}>
+          Couldn't check your verification status
+        </Text>
+        <PressableScale onPress={checkStatus} className="mt-6 h-[48px] px-8 rounded-full items-center justify-center bg-gray-100 dark:bg-gray-800" style={{ backgroundColor: BRAND.primary }}>
+          <Text className="text-white font-bold">Retry</Text>
+        </PressableScale>
       </SafeAreaView>
     );
   }

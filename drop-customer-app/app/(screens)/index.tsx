@@ -139,7 +139,7 @@ export default function Home() {
 		}
 	}, [rActive]);
 
-	useWebSocket('customer', user?.id || "", handleOrderUpdate);
+	useWebSocket('customer', User?.id || "", handleOrderUpdate);
 
 	const { data: TopRatedVendors = [], isLoading: _tLoad, refetch: r2 } = useTopRatedVendors();
 	const TopRatedVendorsLoaded = !_tLoad;
@@ -187,7 +187,7 @@ export default function Home() {
 		setPaginatedProducts([]);
 		setHasMore(true);
 		try {
-			await Promise.all([r1(), r2(), r6(), r7(), rActive(), refetchProducts()]);
+			await Promise.all([r1(), r2(), r6(), r7(), rActive()]);
 		} catch (error) {
 			if (__DEV__) console.error("Refresh failed", error);
 		} finally {

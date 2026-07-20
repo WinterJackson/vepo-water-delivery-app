@@ -125,10 +125,10 @@ export const queueOfflineAction = async (id: string, type: string, payload: stri
     if (!db) return;
     const created_at = new Date().toISOString();
     try {
-        await db.execAsync(`
-            INSERT OR REPLACE INTO offline_actions (id, type, payload, created_at)
-            VALUES ('${id}', '${type}', '${payload}', '${created_at}')
-        `);
+        await db.runAsync(
+            `INSERT OR REPLACE INTO offline_actions (id, type, payload, created_at) VALUES (?, ?, ?, ?)`,
+            [id, type, payload, created_at]
+        );
     } catch (e) {
         if (__DEV__) console.warn('[queueOfflineAction] SQLite failed:', e);
     }
@@ -151,7 +151,7 @@ export const removeQueuedAction = async (id: string) => {
     const db = await getDB();
     if (!db) return;
     try {
-        await db.execAsync(`DELETE FROM offline_actions WHERE id = '${id}'`);
+        await db.runAsync(`DELETE FROM offline_actions WHERE id = ?`, [id]);
     } catch (e) {
         if (__DEV__) console.warn('[removeQueuedAction] SQLite failed:', e);
     }

@@ -1,6 +1,6 @@
 import { ROUTES } from '@/API/routes/ApiRoutes';
 import { useAuth } from '@clerk/clerk-expo';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 
 export function useSubmitReview() {
     const { getToken } = useAuth();
@@ -12,8 +12,27 @@ export function useSubmitReview() {
                 headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
                 body: JSON.stringify(reviewData)
             });
-            if (!res.ok) throw new Error("Submit review failed");
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.detail || "Submit review failed");
+            }
             return res.json();
         }
+    });
+}
+
+export function useTargetReviews(targetType: string, targetId: string) {
+    const { getToken } = useAuth();
+    return useQuery({
+        queryKey: ["reviews", targetType, targetId],
+        queryFn: async () => {
+            const token = await getToken();
+            const res = await fetch(ROUTES.TARGET_REVIEWS(targetType, targetId), {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error("Failed to fetch reviews");
+            return res.json();
+        },
+        enabled: !!targetType && !!targetId
     });
 }

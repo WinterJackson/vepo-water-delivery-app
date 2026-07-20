@@ -44,8 +44,9 @@ const CartItem = ({ data, func }: Props) => {
 			});
 			setChangeQuantity(false);
 			if (func) func();
-		} catch (error: unknown) {
+		} catch (error: any) {
 			setChangeQuantity(false);
+            Toast.error("Update Failed", error?.response?.data?.detail || "Could not update quantity.");
 		}
 	};
 
@@ -56,8 +57,8 @@ const CartItem = ({ data, func }: Props) => {
 				id: data?.id,
 			});
 			if (func) func();
-		} catch (error: unknown) {
-			// handled by mutation
+		} catch (error: any) {
+			Toast.error("Delete Failed", error?.response?.data?.detail || "Could not delete item.");
 		}
 	};
 
@@ -67,7 +68,7 @@ const CartItem = ({ data, func }: Props) => {
 				{/* <--------------------<left>--------------------> */}
 				<View className={`rounded-[16px] overflow-hidden ${darkTheme ? "bg-white/5" : "bg-white"}`}>
 					<Image
-						source={data?.product.image_url}
+						source={data?.product?.image_url}
 						style={{ width: 80, height: 80 }}
 						contentFit="cover"
 					/>
@@ -80,7 +81,7 @@ const CartItem = ({ data, func }: Props) => {
 						}`}
 						numberOfLines={2}
 					>
-						{data?.product.name}
+						{data?.product?.name || "Unknown Product"}
 					</Text>
 					<Text className={`font-bold text-lg ${darkTheme ? "text-accentbg" : "text-primary"}`}>
 						KSH {data?.price}

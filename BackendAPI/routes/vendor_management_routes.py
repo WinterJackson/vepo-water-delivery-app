@@ -55,15 +55,19 @@ class VendorProfileUpdateRequest(BaseModel):
     deposit_fee: Optional[float] = None
 
 
+from pydantic import BaseModel, Field
+
 class ProductCreateRequest(BaseModel):
     name: str
     description: Optional[str] = None
     image_url: str
-    price: float
+    price: float = Field(gt=0)
     discount: Optional[float] = 0
-    capacity: float
+    capacity: float = Field(gt=0)
+    weight_kg: float = Field(gt=0, le=1000, default=20.0)
+    minimum_order_qty: int = Field(ge=1, default=1)
     unit: str
-    stock: int
+    stock: int = Field(ge=0)
     is_available: Optional[bool] = True
 
 
@@ -71,11 +75,13 @@ class ProductUpdateRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     image_url: Optional[str] = None
-    price: Optional[float] = None
+    price: Optional[float] = Field(default=None, gt=0)
     discount: Optional[float] = None
-    capacity: Optional[float] = None
+    capacity: Optional[float] = Field(default=None, gt=0)
+    weight_kg: Optional[float] = Field(default=None, gt=0, le=1000)
+    minimum_order_qty: Optional[int] = Field(default=None, ge=1)
     unit: Optional[str] = None
-    stock: Optional[int] = None
+    stock: Optional[int] = Field(default=None, ge=0)
     is_available: Optional[bool] = None
 
 

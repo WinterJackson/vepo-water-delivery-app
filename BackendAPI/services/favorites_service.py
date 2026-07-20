@@ -37,6 +37,12 @@ async def get_favorites(session: AsyncSession, clerk_id: str):
 
 async def add_favorite(session: AsyncSession, clerk_id: str, product_id: str):
     user_id = await get_user_id_from_clerk(session, clerk_id)
+    
+    from models.product_model import Product
+    product_exists = await session.execute(select(Product.id).where(Product.id == product_id))
+    if not product_exists.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Product not found")
+
     # Check if already favourited
     existing = await session.execute(
         select(Favorite).where(Favorite.user_id == user_id, Favorite.product_id == product_id)

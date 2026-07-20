@@ -51,19 +51,17 @@ router = APIRouter()
 class AddToCartRequest(BaseModel):
   id: str | UUID
   quantity: int
-  user_id: str | UUID = ""
   force_replace: bool = False
 
 @router.post("/add_to_cart")
 @limiter.limit("15/minute")
 async def add_to_cart(request: Request, request_body: AddToCartRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
   clerkId = user["sub"]
-  user_id = request_body.user_id
-  if request_body.user_id == "":
-    user = await get_user(session=db, clerk_id=clerkId)
-    user_id = user.id
+  db_user = await get_user(session=db, clerk_id=clerkId)
+  if not db_user:
+    raise HTTPException(status_code=403, detail="Customer profile not found.")
   await add_to_cart_service(
-    user_id=user_id,
+    user_id=db_user.id,
     session=db,
     product_id=request_body.id,
     quantity=request_body.quantity,
@@ -83,11 +81,11 @@ async def get_cart( db: AsyncSession = Depends(get_db), user = Depends(get_curre
   cart = await fetch_cart(user_id=user.id, session=db)
   return cart
 
-@router.get("/get_detailed_cart", response_model=CartDetailed)
+@router.get("/get_detailed_cart", response_model=CartDetailed | None)
 async def get_detailed_cart(db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
-  clerkId = user["sub"]
-  user = await get_user(session=db, clerk_id=clerkId)
-  cart = await fetch_detailed_cart(user_id=user.id, session=db)
+  clerk_id = user["sub"]
+  db_user = await get_user(session=db, clerk_id=clerk_id)
+  cart = await fetch_detailed_cart(user_id=db_user.id, session=db)
   return cart
 
 @router.post("/change_cart_item_quantity")
@@ -114,7 +112,6 @@ class OrderRequest(BaseModel):
     # NOTE: `amount` intentionally removed (F-018). Server calculates total from
     # cart items + delivery fee to prevent client-side price manipulation.
     id: UUID
-    user_id: UUID
     lat: float
     lng: float
     delivery_type: str = "quick_swap"
@@ -123,11 +120,17 @@ class OrderRequest(BaseModel):
 @router.post("/mpesa_payment")
 @limiter.limit("5/minute")
 async def payment_request(request: Request, order: OrderRequest, db: AsyncSession = Depends(get_db), user = Depends(get_current_customer)):
+    clerk_id = user["sub"]
+    db_user = await get_user(session=db, clerk_id=clerk_id)
+    if not db_user:
+        raise HTTPException(status_code=403, detail="Customer profile not found.")
+    authenticated_user_id = db_user.id
+
     # ── F-018 FIX: Calculate amount server-side from cart total ──────────
     from services.cart_services import fetch_detailed_cart
     from services.order_service import calculate_delivery_fee
     from services.dispatch_policy import DispatchPolicy
-    cart = await fetch_detailed_cart(user_id=order.user_id, session=db)
+    cart = await fetch_detailed_cart(user_id=authenticated_user_id, session=db)
     if cart and getattr(cart, 'is_locked', False):
         raise HTTPException(
             status_code=409, 
@@ -189,7 +192,7 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
 
         # We need the user object to check floor level and welcome offer status
         from models.user_model import User
-        user_model = await db.get(User, order.user_id)
+        user_model = await db.get(User, authenticated_user_id)
         
         # --- First-Time User Bottle Injection ---
         bottle_fee_total = 0.0
@@ -249,7 +252,7 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
             logger.info(f"Cash order requested, server_amount: {server_amount}")
             orders = await create_order(
                 session=db, id=order.id, type="cart", 
-                CheckoutRequestID=None, user_id=order.user_id, 
+                CheckoutRequestID=None, user_id=authenticated_user_id, 
                 phone=order.phone, lat=order.lat, lng=order.lng, 
                 delivery_type=order.delivery_type, payment_method="cash"
             )
@@ -275,7 +278,7 @@ async def payment_request(request: Request, order: OrderRequest, db: AsyncSessio
             logger.info(f"STK push initiated, CheckoutRequestID: {CheckoutRequestID}, server_amount: {server_amount}")
             orders = await create_order(
                 session=db, id=order.id, type="cart", 
-                CheckoutRequestID=CheckoutRequestID, user_id=order.user_id, 
+                CheckoutRequestID=CheckoutRequestID, user_id=authenticated_user_id, 
                 phone=order.phone, lat=order.lat, lng=order.lng, 
                 delivery_type=order.delivery_type, payment_method="mpesa"
             ) 
@@ -348,10 +351,18 @@ async def fetch_active_order(
     order = await get_active_order(session=db, user_id=user_obj.id)
     return order
 
+import os
+
+MPESA_CALLBACK_SECRET = os.getenv("MPESA_CALLBACK_SECRET")
+
 @router.post("/mpesa/callback")
-async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db)):
-    # --- IP Whitelist Validation ---
-    client_ip = request.client.host if request.client else "unknown"
+async def mpesa_callback(request: Request, db: AsyncSession = Depends(get_db), secret: str | None = Query(default=None)):
+    if MPESA_CALLBACK_SECRET and secret != MPESA_CALLBACK_SECRET:
+        logger.warning("M-PESA callback rejected: invalid or missing shared secret")
+        return JSONResponse(status_code=403, content={"message": "Forbidden"})
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    client_ip = forwarded_for.split(",")[0].strip() if forwarded_for else (request.client.host if request.client else "unknown")
     if not is_safaricom_ip(client_ip):
         logger.warning(f"M-PESA callback rejected from non-Safaricom IP: {client_ip}")
         return JSONResponse(status_code=403, content={"message": "Forbidden"})

@@ -42,7 +42,7 @@ async def fetch_detailed_cart(user_id: UUID, session: AsyncSession) -> CartDetai
   result = await session.execute(query)
   cart =  result.unique().scalar_one_or_none()
   if not cart:
-    raise HTTPException(status_code=404)
+    return None
   cart.cart_item.sort(key=lambda item: item.id)  # or item.product.name.lower()
   
   # Inject dynamic empty bottle deposit requirements
@@ -70,6 +70,8 @@ async def fetch_detailed_cart(user_id: UUID, session: AsyncSession) -> CartDetai
   return cart
 
 async def add_to_cart_service( user_id: UUID, session: AsyncSession, product_id : UUID, quantity : int, force_replace: bool = False):
+  if quantity <= 0 or quantity > 500:
+      raise HTTPException(status_code=400, detail="Quantity must be a positive integer between 1 and 500.")
   # prepare details for the cart item [customer id, vendor id, product id, quantity, product Price, subtotal]
   product = await get_product_for_cart(session=session,id=product_id)
   # --- Stock Validation ---
@@ -167,6 +169,8 @@ async def add_to_cart_service( user_id: UUID, session: AsyncSession, product_id 
       await session.commit()
 
 async def change_cart_item_quantity_service(user_id: UUID, session: AsyncSession, quantity: int, id: UUID):
+  if quantity <= 0 or quantity > 500:
+      raise HTTPException(status_code=400, detail="Quantity must be a positive integer between 1 and 500.")
   query = select(Cart).where(Cart.customer_id == user_id).options(selectinload(Cart.cart_item))
   result = await session.execute(query)
   cart =  result.unique().scalar_one_or_none()

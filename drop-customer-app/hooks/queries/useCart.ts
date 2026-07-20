@@ -42,7 +42,7 @@ export function useAddToCart() {
     const { getToken, userId } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (payload: { id: string; quantity: number; user_id: string; force_replace?: boolean }) => {
+        mutationFn: async (payload: { id: string; quantity: number; force_replace?: boolean }) => {
             const token = await getToken();
             const res = await fetch(ROUTES.ADD_TO_CART, {
                 method: "POST",

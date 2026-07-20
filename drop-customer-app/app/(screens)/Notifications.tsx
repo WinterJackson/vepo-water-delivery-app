@@ -42,6 +42,16 @@ const Notifications = () => {
         }
     };
 
+    const safeNavigate = (url: string) => {
+        // Whitelist safe route prefixes to prevent malicious deep links from backend payloads
+        const allowedPrefixes = ["/(screens)", "/product-details", "/vendor"];
+        if (allowedPrefixes.some(prefix => url.startsWith(prefix))) {
+            router.push(url as any);
+        } else {
+            if (__DEV__) console.warn(`Blocked navigation to unsafe url: ${url}`);
+        }
+    };
+
     const unreadCount = notifications.filter((n: NotificationItem) => !n.is_read).length;
 
     const getTypeColor = (type: string) => {
@@ -174,7 +184,7 @@ const Notifications = () => {
                                 onPress={() => {
                                     if (!item.is_read) markAsRead(item.id);
                                     if (item.action_url) {
-                                        router.push(item.action_url);
+                                        safeNavigate(item.action_url);
                                     } else if (item.related_order_id) {
                                         router.push(`/(screens)/Orders`);
                                     }

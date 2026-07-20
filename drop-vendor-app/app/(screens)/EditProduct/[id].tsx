@@ -37,6 +37,8 @@ export default function EditProduct() {
   const [price, setPrice] = useState("");
   const [discount, setDiscount] = useState("0");
   const [capacity, setCapacity] = useState("");
+  const [weightKg, setWeightKg] = useState("20");
+  const [minQty, setMinQty] = useState("1");
   const [unit, setUnit] = useState("litres");
   const [stock, setStock] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,6 +58,8 @@ export default function EditProduct() {
           setPrice(data.price?.toString() || "");
           setDiscount(data.discount?.toString() || "0");
           setCapacity(data.capacity?.toString() || "");
+          setWeightKg(data.weight_kg?.toString() || "20");
+          setMinQty(data.minimum_order_qty?.toString() || "1");
           setUnit(data.unit || "litres");
           setStock(data.stock?.toString() || "");
         } else {
@@ -73,8 +77,8 @@ export default function EditProduct() {
   const handleSubmit = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    if (!name || !price || !capacity || !stock) {
-      Toast.error("Validation Error", "Please fill in all required fields (Name, Price, Capacity, Stock).");
+    if (!name || !price || !capacity || !stock || !weightKg) {
+      Toast.error("Validation Error", "Please fill in all required fields (Name, Price, Capacity, Weight, Stock).");
       return;
     }
     
@@ -96,7 +100,10 @@ export default function EditProduct() {
     const payload = {
       name, description, image_url: finalImageUrl,
       price: parseFloat(price), discount: parseFloat(discount || "0"),
-      capacity: parseFloat(capacity), unit, stock: parseInt(stock),
+      capacity: parseFloat(capacity), 
+      weight_kg: parseFloat(weightKg),
+      minimum_order_qty: parseInt(minQty || "1"),
+      unit, stock: parseInt(stock),
     };
     try {
       const route = VendorApiRoutes.UpdateProduct(id as string);
@@ -238,6 +245,17 @@ export default function EditProduct() {
               <View className="flex-1">
                 <Text className={labelStyle}>Capacity *</Text>
                 <TextInput className={inputStyle} placeholder="20" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={capacity} onChangeText={setCapacity} keyboardType="numeric" />
+              </View>
+              <View className="flex-1">
+                <Text className={labelStyle}>Weight (kg) *</Text>
+                <TextInput className={inputStyle} placeholder="20" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={weightKg} onChangeText={setWeightKg} keyboardType="numeric" />
+              </View>
+            </View>
+
+            <View className="flex-row gap-4">
+              <View className="flex-1">
+                <Text className={labelStyle}>Min. Qty</Text>
+                <TextInput className={inputStyle} placeholder="1" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={minQty} onChangeText={setMinQty} keyboardType="numeric" />
               </View>
               <View className="flex-1">
                 <Text className={labelStyle}>Unit</Text>

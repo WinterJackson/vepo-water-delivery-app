@@ -1,14 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from uuid import UUID
 
 class RequestBodyIdAndQuantity(BaseModel): 
   id : UUID | str
-  quantity : int
+  quantity : int = Field(gt=0, le=500, description="Must be a positive integer, capped to prevent abuse")
   # user_id : str
 
 class RequestBodyIdUserIdAndQuantity(BaseModel): 
   id : UUID | str
-  quantity : int
+  quantity : int = Field(gt=0, le=500)
   user_id : str
 
 class RequestBodyIdAndType(BaseModel): 
@@ -25,4 +25,4 @@ class RequestBodyProfilePic(BaseModel):
   # clerk_id : str
 
 class RequestBodyPage(BaseModel):
-  page: int
+  page: int = Field(ge=1, description="1-indexed page number")

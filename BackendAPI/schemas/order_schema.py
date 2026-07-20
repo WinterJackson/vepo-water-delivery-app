@@ -101,6 +101,7 @@ class BaseOrder(BaseModel):
 
 class OrderWithDetails(BaseOrder):
     user: Optional[CustomerPublicProfile] = None
+    distance_km: Optional[float] = None
     
     model_config = {"from_attributes": True}
 

@@ -516,3 +516,32 @@ async def register_push_token(
             return {"message": "Push token registered"}
 
     raise HTTPException(status_code=404, detail=f"Authenticated user not found for app_type: {app_type}")
+
+@router.delete("/push-token")
+async def clear_push_token(
+    app_type: str = "customer",
+    session: AsyncSession = Depends(get_db),
+    user = Depends(get_current_user),
+):
+    clerk_id = user["sub"]
+    if app_type == "vendor":
+        result = await session.execute(select(Vendor).where(or_(Vendor.clerk_id == clerk_id, Vendor.staff_clerk_id == clerk_id)))
+        entity = result.scalar_one_or_none()
+        if entity:
+            if entity.clerk_id == clerk_id:
+                entity.push_token = None
+            else:
+                entity.staff_push_token = None
+    elif app_type == "rider":
+        result = await session.execute(select(Deliverer).where(Deliverer.clerk_id == clerk_id))
+        entity = result.scalar_one_or_none()
+        if entity:
+            entity.push_token = None
+    else:
+        result = await session.execute(select(User).where(User.clerk_id == clerk_id))
+        entity = result.scalar_one_or_none()
+        if entity:
+            entity.push_token = None
+
+    await session.commit()
+    return {"message": "Push token cleared"}

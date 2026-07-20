@@ -146,7 +146,7 @@ async def get_last_order_to_vendor(session: AsyncSession, clerk_id: str, vendor_
                     "discount": float(item.product.discount) if item.product.discount else 0,
                     "image_url": item.product.image_url,
                     "is_available": item.product.is_available if hasattr(item.product, 'is_available') else True,
-                    "stock_quantity": item.product.stock_quantity if hasattr(item.product, 'stock_quantity') else None,
+                    "stock_quantity": item.product.stock,
                 } if item.product else None,
             }
             for item in (order.order_item or [])

@@ -69,7 +69,7 @@ class Order(Base):
   proof_url = Column(String, nullable=True)
   cancellation_reason = Column(String, nullable=True)
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
-  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
+  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
   
   # relationships
   order_item = relationship("OrderItem", back_populates="order")

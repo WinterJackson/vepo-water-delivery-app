@@ -58,6 +58,7 @@ export const ApiRoutes = {
 
     // Push Token
     RegisterPushToken: { path: `${BASE_URL}/api/auth/push-token`, method: "POST" },
+    ClearPushToken: { path: `${BASE_URL}/api/auth/push-token`, method: "DELETE" },
 
     // Saved Locations
     GetSavedLocations: { path: `${BASE_URL}/api/auth/saved-locations`, method: "GET" },
@@ -75,6 +76,7 @@ export const ROUTES = {
     UPDATE_PROFILE_PIC: `${BASE_URL}/api/auth/update_profile_pic`,
     UPDATE_LOCATION: `${BASE_URL}/api/auth/update_user_location`,
     REGISTER_PUSH_TOKEN: `${BASE_URL}/api/auth/push-token`,
+    CLEAR_PUSH_TOKEN: `${BASE_URL}/api/auth/push-token`,
     UPDATE_USER: `${BASE_URL}/api/auth/update_user`,
     DELETE_ACCOUNT: `${BASE_URL}/api/auth/delete_account`,
     GET_PROFILE_STATUS: (appType: string) => `${BASE_URL}/api/auth/profile-status?app_type=${appType}`,
@@ -125,6 +127,7 @@ export const ROUTES = {
 
     // Reviews
     SUBMIT_REVIEW: `${BASE_URL}/api/reviews`,
+    TARGET_REVIEWS: (targetType: string, targetId: string) => `${BASE_URL}/api/reviews/target/${targetType}/${targetId}`,
 
     // Tracking
     RIDER_LOCATION: (orderId: string) => `${BASE_URL}/api/rider/orders/${orderId}/rider-location`,

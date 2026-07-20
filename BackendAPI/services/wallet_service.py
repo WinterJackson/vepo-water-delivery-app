@@ -68,15 +68,15 @@ async def handle_mpesa_topup_callback(session: AsyncSession, payload: dict):
         
         # Credit user wallet
         if transaction.user_type == UserType.vendor:
-            user_res = await session.execute(select(Vendor).where(Vendor.clerk_id == transaction.user_id))
+            user_res = await session.execute(select(Vendor).where(Vendor.clerk_id == transaction.user_id).with_for_update())
             user = user_res.scalars().first()
             if user: user.wallet_balance = float(user.wallet_balance or 0) + float(transaction.amount)
         elif transaction.user_type == UserType.rider:
-            user_res = await session.execute(select(Deliverer).where(Deliverer.clerk_id == transaction.user_id))
+            user_res = await session.execute(select(Deliverer).where(Deliverer.clerk_id == transaction.user_id).with_for_update())
             user = user_res.scalars().first()
             if user: user.wallet_balance = float(user.wallet_balance or 0) + float(transaction.amount)
         elif transaction.user_type == UserType.customer:
-            user_res = await session.execute(select(User).where(User.clerk_id == transaction.user_id))
+            user_res = await session.execute(select(User).where(User.clerk_id == transaction.user_id).with_for_update())
             user = user_res.scalars().first()
             if user: user.wallet_balance = float(user.wallet_balance or 0) + float(transaction.amount)
             
@@ -95,13 +95,15 @@ async def initiate_wallet_withdrawal(session: AsyncSession, user_id: str, user_t
         raise HTTPException(status_code=400, detail="Minimum withdrawal amount is 500 KSH.")
         
     # Check balance
-    user = None
-    if user_type.lower() == "vendor":
-        user_res = await session.execute(select(Vendor).where(Vendor.clerk_id == user_id))
-        user = user_res.scalars().first()
-    elif user_type.lower() == "rider":
-        user_res = await session.execute(select(Deliverer).where(Deliverer.clerk_id == user_id))
-        user = user_res.scalars().first()
+    model_map = {"vendor": Vendor, "rider": Deliverer, "customer": User}
+    model = model_map.get(user_type.lower())
+    if model is None:
+        raise HTTPException(status_code=400, detail="Invalid user_type for withdrawal.")
+
+    result = await session.execute(
+        select(model).where(model.clerk_id == user_id).with_for_update()
+    )
+    user = result.scalars().first()
     
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -119,6 +121,8 @@ async def initiate_wallet_withdrawal(session: AsyncSession, user_id: str, user_t
     elif user_type.lower() == "rider":
         if current_balance >= 1000.0:
             transaction_fee = 0.0
+    elif user_type.lower() == "customer":
+        transaction_fee = 0.0  # No network fee levied on customer float withdrawals
 
     if amount <= transaction_fee:
         raise HTTPException(status_code=400, detail=f"Withdrawal amount must be greater than network fee (KSH {transaction_fee}).")

@@ -2,7 +2,7 @@ import logging
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from sqlalchemy.orm import joinedload
 from uuid import UUID
 from datetime import datetime, timedelta, timezone
@@ -188,6 +188,10 @@ async def get_trip_radar_orders(session: AsyncSession, clerk_id: str):
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
         raise HTTPException(status_code=404, detail="Rider not found")
+    if deliverer.lat is None or deliverer.lng is None:
+        raise HTTPException(status_code=400, detail="Enable location sharing to see nearby orders.")
+
+    from geopy.distance import geodesic
 
     query = (
         select(Order)
@@ -198,10 +202,23 @@ async def get_trip_radar_orders(session: AsyncSession, clerk_id: str):
             joinedload(Order.user)
         )
         .order_by(Order.created_at.desc())
-        .limit(20) # Only load recent trip radar items
+        .limit(50) 
     )
     result = await session.execute(query)
-    return result.unique().scalars().all()
+    orders = result.unique().scalars().all()
+
+    rider_point = (deliverer.lat, deliverer.lng)
+    enriched = []
+    for order in orders:
+        if order.vendor and order.vendor.lat is not None and order.vendor.lng is not None:
+            distance_km = round(geodesic(rider_point, (order.vendor.lat, order.vendor.lng)).km, 2)
+        else:
+            distance_km = None
+        order.distance_km = distance_km
+        enriched.append(order)
+
+    enriched.sort(key=lambda o: (o.distance_km if o.distance_km is not None else float("inf")))
+    return enriched[:20]
 
 
 async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id: UUID, new_status: str, proof_url: str | None = None, empties_received: int | None = None):
@@ -209,13 +226,22 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
     if not deliverer:
         raise HTTPException(status_code=404, detail="Your rider account could not be found. Please ensure your profile is fully set up.")
 
-    order = await session.get(Order, order_id)
+    result = await session.execute(select(Order).where(Order.id == order_id).with_for_update())
+    order = result.scalar_one_or_none()
     if not order or order.deliverer_id != deliverer.id:
         raise HTTPException(status_code=404, detail="This order is no longer assigned to you. It may have been reassigned or cancelled.")
 
     valid_statuses = ["picked_up", "delivered"]
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    # Idempotency: if this transition was already applied, return success without re-running side effects.
+    if order.order_status == new_status:
+        return {"message": f"Order status already '{new_status}'", "already_applied": True}
+    if new_status == "picked_up" and order.order_status not in ("pending", "accepted", "preparing", "ready"):
+        raise HTTPException(status_code=409, detail=f"Cannot mark picked up from status '{order.order_status}'.")
+    if new_status == "delivered" and order.order_status not in ("pending", "accepted", "preparing", "ready", "picked_up"):
+        raise HTTPException(status_code=409, detail=f"Order is already in a terminal state ('{order.order_status}') and cannot be marked delivered again.")
 
     order.order_status = new_status
     if proof_url:
@@ -364,6 +390,13 @@ async def get_deliverer_earnings(session: AsyncSession, clerk_id: str):
 
     seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
 
+    from models.vendor_model import Vendor, VendorType
+    paid_rider_filter = and_(
+        Order.deliverer_id == deliverer.id,
+        Order.order_status == "delivered",
+        or_(Vendor.vendor_type.is_(None), Vendor.vendor_type != VendorType.wholesale_b2b),
+    )
+
     total_deliveries_q = select(func.count(Order.id)).where(
         and_(Order.deliverer_id == deliverer.id, Order.order_status == "delivered")
     )
@@ -376,10 +409,10 @@ async def get_deliverer_earnings(session: AsyncSession, clerk_id: str):
         )
     )
 
-    total_earnings_q = select(func.sum(
-        func.coalesce(Order.rider_net, Order.delivery_fee)
-    )).where(
-        and_(Order.deliverer_id == deliverer.id, Order.order_status == "delivered")
+    total_earnings_q = (
+        select(func.sum(func.coalesce(Order.rider_net, Order.delivery_fee)))
+        .join(Vendor, Vendor.id == Order.vendor_id)
+        .where(paid_rider_filter)
     )
 
     total_surcharges_q = select(
@@ -573,18 +606,7 @@ async def accept_delivery_radar(session: AsyncSession, clerk_id: str, order_id: 
                     detail=f"Insufficient Wallet Balance. You need at least KSH {required_float:,.2f} to accept this Cash order. Your balance is KSH {current_balance:,.2f}."
                 )
 
-        # Anti-Fraud: Verify rider is approved by this specific vendor
-        from models.vendor_rider_model import VendorRiderRegistry
-        registry_check = await session.execute(
-            select(VendorRiderRegistry).where(
-                VendorRiderRegistry.rider_id == deliverer.id,
-                VendorRiderRegistry.vendor_id == order.vendor_id,
-                VendorRiderRegistry.status == "approved"
-            )
-        )
-        if not registry_check.scalar_one_or_none():
-            await session.rollback()
-            raise HTTPException(status_code=403, detail="You are not approved by this vendor to deliver their orders.")
+        # Removed duplicate registry check in favor of the auto-register block below
 
         # Anti-Fraud: Self-Dealing Prevention
         if order.user and order.user.clerk_id == clerk_id:
@@ -783,45 +805,6 @@ async def report_address_mismatch(session: AsyncSession, clerk_id: str, order_id
 
     return {"message": "Mismatch reported. Waiting for customer response.", "status": order.order_status}
 
-async def _bottle_rejection_fallback(order_id: UUID, rejection_id: UUID):
-    """EDGE-03 FIX: Timeout fallback for bottle rejections. Auto-cancels if admin doesn't review in 3 mins."""
-    from db.session import AsyncSessionLocal
-    await asyncio.sleep(180) # Wait 3 minutes
-    try:
-        async with AsyncSessionLocal() as session:
-            from models.bottle_rejection_model import BottleRejectionTicket, RejectionStatus
-            from models.order_model import Order
-            rejection = await session.get(BottleRejectionTicket, rejection_id)
-            if rejection and rejection.status == RejectionStatus.PENDING_REVIEW:
-                rejection.status = RejectionStatus.APPROVED
-                rejection.admin_notes = "Auto-approved due to timeout. Order cancelled."
-                
-                order = await session.get(Order, order_id)
-                if order and order.order_status == "pending_review":
-                    order.order_status = "cancelled"
-                    if order.payment_status == "paid":
-                        order.payment_status = "refund_pending"
-                        order.commission_lost = order.platform_total
-                    
-                    from services.vendor_management_service import _restore_order_stock
-                    await _restore_order_stock(session, order)
-                    await session.commit()
-                    
-                    from routes.websocket_routes import manager
-                    await manager.broadcast_order_update(
-                        vendor_id=str(order.vendor_id),
-                        customer_id=str(order.customer_id),
-                        deliverer_id=str(order.deliverer_id),
-                        payload={
-                            "action": "ORDER_STATUS_UPDATE", 
-                            "order_id": str(order.id), 
-                            "status": "cancelled",
-                            "message": "Order cancelled because your empty bottle did not pass inspection."
-                        }
-                    )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Fallback rejection error: {e}")
 
 async def report_bottle_rejection(session: AsyncSession, clerk_id: str, order_id: UUID, reason_text: str, photo_urls: list[str]):
     from models.bottle_rejection_model import BottleRejectionTicket, RejectionStatus
@@ -849,9 +832,8 @@ async def report_bottle_rejection(session: AsyncSession, clerk_id: str, order_id
     await session.commit()
     await session.refresh(rejection)
 
-    # Spawn background task for timeout fallback
-    asyncio.create_task(_bottle_rejection_fallback(order.id, rejection.id))
-
+    # The ARQ cron sweep (jobs/auto_resolve_bottle_rejections.py) now owns timeout resolution reliably, 
+    # independent of this request's lifetime on Vercel Serverless.
     try:
         from routes.websocket_routes import manager
         await manager.broadcast_order_update(

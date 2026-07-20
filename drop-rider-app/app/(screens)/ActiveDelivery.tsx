@@ -290,17 +290,11 @@ export default function ActiveDelivery() {
   const updateDeliveryStatus = async (status: string, proofUrl?: string) => {
     if (!activeOrder) return;
     
-    // 🔥 Optimistic UI Update: Flip the UI state BEFORE network response
     const previousStatus = activeOrder.order_status;
     const previousOrder = { ...activeOrder };
+    // Optimistic UI Update: Flip the UI state BEFORE network response
+    // Do NOT clear activeOrder or show a success toast yet.
     setActiveOrder({ ...activeOrder, order_status: status });
-    
-    // For delivered status, clear immediately for the feeling of extreme speed bypassing lag loops completely
-    if (status === "delivered") {
-        setActiveOrder(null);
-        locationSubscription.current?.remove();
-        Toast.success("Success", "Delivery completed!");
-    }
     
     try {
       const token = await getToken();
@@ -332,16 +326,20 @@ export default function ActiveDelivery() {
         throw new Error("Sync Failed Offline");
       }
 
-      if (status !== "delivered") {
+      // Only NOW, after server confirmation, treat delivery as complete.
+      if (status === "delivered") {
+          setActiveOrder(null);
+          locationSubscription.current?.remove();
+          Toast.success("Success", "Delivery completed!");
+      } else {
         queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
       }
     } catch (e) {
-      // Execute the Offline Queue mapping deterministically rather than rolling back explicitly
-      if (status !== "delivered") {
-        // Rollback optimistic state for non-delivered since we're queuing for later
-        setActiveOrder({ ...previousOrder, order_status: previousStatus });
-        await queueOfflineAction(activeOrder.id, "UPDATE_DELIVERY_STATUS", JSON.stringify({ status }));
-      }
+      // Network-level failure: ALWAYS queue for retry, delivered included — money and
+      // notifications depend on this reaching the server eventually.
+      setActiveOrder({ ...previousOrder, order_status: previousStatus });
+      await queueOfflineAction(activeOrder.id, "UPDATE_DELIVERY_STATUS", JSON.stringify({ status, proof_url: proofUrl, empties_received: status === "delivered" ? emptiesReceived : undefined }));
+      Toast.info("Saved Offline", "No connection — this update will sync automatically once you're back online.");
     }
   };
 

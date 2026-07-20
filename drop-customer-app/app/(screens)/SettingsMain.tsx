@@ -100,6 +100,22 @@ export default function SettingsMain() {
     const executeSignOut = async () => {
         Popup.setLoading(true);
         try {
+            // Unregister push token before signing out to prevent cross-account notification leakage
+            try {
+                const token = await getToken();
+                if (token) {
+                    await fetch(ApiRoutes.ClearPushToken.path, {
+                        method: ApiRoutes.ClearPushToken.method,
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            "Content-Type": "application/json",
+                        },
+                    });
+                }
+            } catch (e) {
+                if (__DEV__) console.warn("Failed to unregister push token", e);
+            }
+
             await signOut();
             // HIGH-01: Clear all cached data to prevent cross-user data leakage
             const { QueryClient } = require('@tanstack/react-query');

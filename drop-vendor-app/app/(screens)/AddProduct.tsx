@@ -30,6 +30,8 @@ export default function AddProduct() {
   const [price, setPrice] = useState("");
   const [discount, setDiscount] = useState("0");
   const [capacity, setCapacity] = useState("");
+  const [weightKg, setWeightKg] = useState("20");
+  const [minQty, setMinQty] = useState("1");
   const [unit, setUnit] = useState("litres");
   const [stock, setStock] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,8 +40,8 @@ export default function AddProduct() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // Validate required fields
-    if (!name || !price || !capacity || !stock) {
-      Toast.error("Validation Error", "Please fill in all required fields (Name, Price, Capacity, Stock).");
+    if (!name || !price || !capacity || !stock || !weightKg) {
+      Toast.error("Validation Error", "Please fill in all required fields (Name, Price, Capacity, Weight, Stock).");
       return;
     }
     
@@ -63,7 +65,10 @@ export default function AddProduct() {
     const payload = {
       name, description, image_url: finalImageUrl,
       price: parseFloat(price), discount: parseFloat(discount || "0"),
-      capacity: parseFloat(capacity), unit, stock: parseInt(stock),
+      capacity: parseFloat(capacity), 
+      weight_kg: parseFloat(weightKg),
+      minimum_order_qty: parseInt(minQty || "1"),
+      unit, stock: parseInt(stock),
     };
     try {
       const res = await fetch(VendorApiRoutes.CreateProduct.path, {
@@ -189,6 +194,17 @@ export default function AddProduct() {
               <View className="flex-1">
                 <Text className={labelStyle}>Capacity *</Text>
                 <TextInput className={inputStyle} placeholder="20" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={capacity} onChangeText={setCapacity} keyboardType="numeric" />
+              </View>
+              <View className="flex-1">
+                <Text className={labelStyle}>Weight (kg) *</Text>
+                <TextInput className={inputStyle} placeholder="20" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={weightKg} onChangeText={setWeightKg} keyboardType="numeric" />
+              </View>
+            </View>
+
+            <View className="flex-row gap-4">
+              <View className="flex-1">
+                <Text className={labelStyle}>Min. Qty</Text>
+                <TextInput className={inputStyle} placeholder="1" placeholderTextColor={darkTheme ? "#64748b" : "#94a3b8"} value={minQty} onChangeText={setMinQty} keyboardType="numeric" />
               </View>
               <View className="flex-1">
                 <Text className={labelStyle}>Unit</Text>

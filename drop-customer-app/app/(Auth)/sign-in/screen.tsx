@@ -120,10 +120,14 @@ export default function SignIn() {
 			if (signInAttempt.status === "complete") {
 				await setActive({ session: signInAttempt.createdSessionId });
 				success = true
+			} else if (signInAttempt.status === "needs_second_factor") {
+				setErrors([{ longMessage: "Two-factor authentication is currently not supported on this app. Please log in via the web or disable 2FA.", message: "2FA required" } as any]);
+				success = false;
 			} else {
 				// If the status isn't complete, check why. User might need to
 				// complete further steps.
-				// if (__DEV__) console.error(JSON.stringify(signInAttempt, null, 2));
+				if (__DEV__) console.error(JSON.stringify(signInAttempt, null, 2));
+				setErrors([{ longMessage: `Login incomplete. Status: ${signInAttempt.status}. Further steps required.`, message: "Login incomplete" } as any]);
 				success = false
 			}
 		} catch (err) {

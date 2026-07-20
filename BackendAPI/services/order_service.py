@@ -548,7 +548,8 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
           )
 
   # --- Debt Intercept: Block checkout if customer has outstanding bottle debts ---
-  user_check = await session.get(User, user_id)
+  user_check_res = await session.execute(select(User).where(User.id == user_id).with_for_update())
+  user_check = user_check_res.scalar_one_or_none()
   if user_check and float(user_check.debt_balance) > 0:
       raise HTTPException(
           status_code=402,
@@ -620,7 +621,8 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
       order_h3_index = h3.latlng_to_cell(lat, lng, 8)
 
       # --- Welcome Offer (First-Bottle Injection & 30% Discount) ---
-      user = await session.get(User, user_id)
+      user_res = await session.execute(select(User).where(User.id == user_id).with_for_update())
+      user = user_res.scalar_one_or_none()
       total_quantity = sum(item.quantity for item in pre_order_items)
       
       welcome_discount = 0.0
@@ -969,7 +971,8 @@ async def cancel_customer_order(session: AsyncSession, user_id: UUID, order_id: 
     # If the order is "accepted", the vendor is likely preparing it.
     # We enforce a KSH 50 cancellation fee added to their debt balance.
     if order.order_status == "accepted":
-        user = await session.get(User, user_id)
+        user_res = await session.execute(select(User).where(User.id == user_id).with_for_update())
+        user = user_res.scalar_one_or_none()
         if user:
             penalty = 50.0
             user.debt_balance = float(user.debt_balance or 0) + penalty
@@ -999,7 +1002,8 @@ async def cancel_customer_order(session: AsyncSession, user_id: UUID, order_id: 
         )
 
     # Restore Wallet Balance and Welcome Offer
-    user = await session.get(User, user_id)
+    user_res = await session.execute(select(User).where(User.id == user_id).with_for_update())
+    user = user_res.scalar_one_or_none()
     if user:
         if order.wallet_discount and float(order.wallet_discount) > 0:
             user.wallet_balance = float(user.wallet_balance or 0) + float(order.wallet_discount)

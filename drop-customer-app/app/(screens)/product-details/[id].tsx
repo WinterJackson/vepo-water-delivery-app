@@ -117,7 +117,6 @@ const ProductDetails = () => {
 		const payload = {
 			id: id,
 			quantity: Quantity,
-			user_id: User?.id || "",
 			force_replace: forceReplace,
 		};
 		if (__DEV__) console.log(payload)
@@ -125,12 +124,12 @@ const ProductDetails = () => {
             await addToCartMutation(payload);
 			fetchCart()
 			setLoading(false);
-		} catch (error: unknown) {
+		} catch (error: any) {
 			setLoading(false);
-			if ((error as {type?: string})?.type === "vendor_conflict") {
+			if (error?.response?.data?.type === "vendor_conflict") {
 				Popup.show({
 					title: "Replace Cart?",
-					message: `Your cart has items from ${(error as {existing_vendor?: string}).existing_vendor}. Adding this will replace your current cart.`,
+					message: `Your cart has items from ${error?.response?.data?.existing_vendor || 'another vendor'}. Adding this will replace your current cart.`,
 					cancelText: "Cancel",
 					confirmText: "Replace",
 					isDestructive: true,
@@ -139,7 +138,9 @@ const ProductDetails = () => {
 						add_to_cart(true);
 					}
 				});
-			}
+			} else {
+                Toast.error("Failed to add", error?.response?.data?.detail || "Could not add item to cart.");
+            }
 		}
 	};
 
@@ -163,7 +164,6 @@ const ProductDetails = () => {
 		const payload = {
 			id: id,
 			quantity: Quantity,
-			user_id: User?.id || "",
 			force_replace: forceReplace,
 		};
 		if (__DEV__) console.log("Direct checkout via Add To Cart bypass:", payload);
@@ -175,12 +175,12 @@ const ProductDetails = () => {
 			
 			// Navigate to Cart screen to complete the flow with Payment methods and Address integration
 			router.push("/(screens)/Cart");
-		} catch (error: unknown) {
+		} catch (error: any) {
 			setLoading(false);
-			if ((error as {type?: string})?.type === "vendor_conflict") {
+			if (error?.response?.data?.type === "vendor_conflict") {
 				Popup.show({
 					title: "Replace Cart?",
-					message: `Your cart has items from ${(error as {existing_vendor?: string}).existing_vendor}. Adding this will replace your current cart.`,
+					message: `Your cart has items from ${error?.response?.data?.existing_vendor || 'another vendor'}. Adding this will replace your current cart.`,
 					cancelText: "Cancel",
 					confirmText: "Replace & Checkout",
 					isDestructive: true,
@@ -191,6 +191,7 @@ const ProductDetails = () => {
 				});
 			} else {
 				if (__DEV__) console.error("Direct checkout error:", error);
+                Toast.error("Failed to checkout", error?.response?.data?.detail || "Could not proceed to checkout.");
 			}
 		}
 	};

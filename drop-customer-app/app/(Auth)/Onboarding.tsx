@@ -36,13 +36,15 @@ export default function CustomerOnboarding() {
     const [submitting, setSubmitting] = useState(false);
     const [missingFields, setMissingFields] = useState<string[]>([]);
     const [readyToRoute, setReadyToRoute] = useState(false);
+    const [fetchError, setFetchError] = useState(false);
     
     // Form States
     const [phoneNumber, setPhoneNumber] = useState("");
 
-    useEffect(() => {
-        const checkStatus = async () => {
-            try {
+    const checkStatus = async () => {
+        setLoading(true);
+        setFetchError(false);
+        try {
                 const token = await getToken();
                 const res = await fetch(ROUTES.GET_PROFILE_STATUS("customer"), {
                     headers: { Authorization: `Bearer ${token}` }
@@ -55,13 +57,18 @@ export default function CustomerOnboarding() {
                         // Nothing missing, safe to route
                         setReadyToRoute(true);
                     }
+                } else {
+                    setFetchError(true);
                 }
             } catch (error) {
                 if (__DEV__) console.error("Failed to check profile status", error);
+                setFetchError(true);
             } finally {
                 setLoading(false);
             }
         };
+
+    useEffect(() => {
         if (isLoaded) {
             checkStatus();
         }
@@ -120,6 +127,23 @@ export default function CustomerOnboarding() {
             <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
                 <StatusBar barStyle={darkTheme ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
                 <CustomerOnboardingSkeleton />
+            </SafeAreaView>
+        );
+    }
+
+    if (fetchError) {
+        return (
+            <SafeAreaView className={`flex-1 items-center justify-center ${darkTheme ? "bg-black" : ""}`}>
+                <StatusBar barStyle={darkTheme ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
+                <Ionicons name="alert-circle-outline" size={64} color="red" />
+                <Text className={`mt-4 text-lg font-semibold ${darkTheme ? "text-white" : "text-black"}`}>Failed to load profile</Text>
+                <Text className={`mt-2 mb-6 text-center px-8 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>We couldn't connect to our servers to verify your profile status. Please check your internet connection.</Text>
+                <PressableScale
+                    onPress={checkStatus}
+                    className="bg-accentbg px-8 py-3 rounded-full"
+                >
+                    <Text className="text-white font-bold">Retry</Text>
+                </PressableScale>
             </SafeAreaView>
         );
     }

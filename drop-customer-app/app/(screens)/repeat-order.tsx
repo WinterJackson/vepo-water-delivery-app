@@ -32,18 +32,27 @@ export default function RepeatOrderScreen() {
     if (!lastOrder?.items?.length) return;
     try {
       // Add each item from the last order to the cart in parallel
-      await Promise.all(
+      const results = await Promise.allSettled(
         lastOrder.items.map((item: any) => 
           addToCartMutation({
             id: item.product_id,
-            quantity: item.quantity,
-            user_id: User?.id || '',
+            quantity: item.quantity
           })
         )
       );
-      fetchCart();
-      Toast.success('Order Added', 'All items added to your cart!');
-      router.push('/(screens)/Cart');
+      
+      const failed = results.filter(r => r.status === "rejected").length;
+      fetchCart(); // reflect whatever DID succeed
+      
+      if (failed === 0) {
+        Toast.success('Order Added', 'All items added to your cart!');
+        router.push('/(screens)/Cart');
+      } else if (failed < results.length) {
+        Toast.error('Partially Added', `${results.length - failed} of ${results.length} items were added. Some may no longer be available.`);
+        router.push('/(screens)/Cart');
+      } else {
+        Toast.error('Error', 'None of these items are available right now. Please try ordering them individually.');
+      }
     } catch (e: unknown) {
       if (__DEV__) console.error('Repeat order failed:', e);
       Toast.error('Error', 'Failed to add items to cart. Please try again.');
@@ -118,7 +127,7 @@ export default function RepeatOrderScreen() {
                 </View>
                 <View>
                   <Text className={`font-bold text-lg ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>
-                    {lastOrder.vendor_name}
+                    {lastOrder.vendor?.business_name || "Vendor"}
                   </Text>
                   <Text className={`text-sm ${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>
                     Last Order: {formatDate(lastOrder.created_at)}
@@ -137,11 +146,11 @@ export default function RepeatOrderScreen() {
                           <Text className={`font-bold ${darkTheme ? "text-primary" : "text-blue-600"}`}>{item.quantity}x</Text>
                         </View>
                         <Text className={`font-medium flex-1 ${darkTheme ? "text-on-surface" : "text-gray-800"}`} numberOfLines={1}>
-                          {item.name}
+                          {item.product?.name || "Item"}
                         </Text>
                       </View>
                       <Text className={`font-bold ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>
-                        KSH {Number(item.subtotal).toFixed(2)}
+                        KSH {Number(item.subtotal_at_order || 0).toFixed(2)}
                       </Text>
                     </View>
                   ))}
@@ -155,7 +164,7 @@ export default function RepeatOrderScreen() {
                   <View className="flex-row justify-between">
                     <Text className={`${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>Subtotal</Text>
                     <Text className={`${darkTheme ? "text-on-surface" : "text-gray-800"}`}>
-                      KSH {Number(lastOrder.product_subtotal || lastOrder.total_amount || 0).toFixed(2)}
+                      KSH {lastOrder.items.reduce((sum: number, i: any) => sum + Number(i.subtotal_at_order || 0), 0).toFixed(2)}
                     </Text>
                   </View>
                   <View className="flex-row justify-between">
@@ -164,14 +173,6 @@ export default function RepeatOrderScreen() {
                       KSH {Number(lastOrder.delivery_fee || 0).toFixed(2)}
                     </Text>
                   </View>
-                  {Number(lastOrder.service_fee || 0) > 0 && (
-                    <View className="flex-row justify-between">
-                      <Text className={`${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>Service Fee</Text>
-                      <Text className={`${darkTheme ? "text-on-surface" : "text-gray-800"}`}>
-                        KSH {Number(lastOrder.service_fee).toFixed(2)}
-                      </Text>
-                    </View>
-                  )}
                   <View className={`flex-row justify-between pt-2 mt-2 border-t ${darkTheme ? "border-outline-variant/20" : "border-gray-100"}`}>
                     <Text className={`font-bold text-lg ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>Total</Text>
                     <Text className={`font-bold text-lg text-primary`}>

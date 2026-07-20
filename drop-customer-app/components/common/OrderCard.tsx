@@ -125,7 +125,7 @@ const OrderCard = React.memo(({ order }: Props) => {
         const item = items[i];
         await new Promise((resolve, reject) => {
           addToCart(
-            { id: item.product_id, quantity: item.quantity, user_id: userId as string, force_replace: i === 0 ? forceReplace : false },
+            { id: item.product_id, quantity: item.quantity, force_replace: i === 0 ? forceReplace : false },
             { onSuccess: resolve as any, onError: reject }
           );
         });
