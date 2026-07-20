@@ -1,12 +1,8 @@
 import * as ImageManipulator from 'expo-image-manipulator';
 import { Toast } from '@/lib/toast';
 
-const CloudinaryUpload = async (uri: string, name: string | null | undefined) => {
-  const cloudName = 'dn5f0jksu';
-  const uploadPreset = 'drop_uploads';
-
+const SecureUpload = async (uri: string, name: string | null | undefined, getToken: () => Promise<string | null>) => {
   const formData = new FormData();
-
   const fileName = name ? name.split('.')[0] + '.webp' : 'delivery_proof.webp';
 
   // Compress and convert to WebP before uploading (performance + bandwidth optimization)
@@ -29,21 +25,28 @@ const CloudinaryUpload = async (uri: string, name: string | null | undefined) =>
   };
 
   formData.append('file', file as any);
-  formData.append('upload_preset', uploadPreset);
 
   try {
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/upload`, {
+    const token = await getToken();
+    const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/deliverer/upload_proof`, {
       method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
       body: formData,
     });
+
+    if (!res.ok) {
+        throw new Error(`Upload failed with status ${res.status}`);
+    }
 
     const data = await res.json();
     return data;
   } catch (err: unknown) {
-    if (__DEV__) console.error('Cloudinary upload error:', err);
+    if (__DEV__) console.error('Secure upload error:', err);
     Toast.error('Upload Error', 'Failed to upload proof photo. Please try again.');
     throw err;
   }
 };
 
-export default CloudinaryUpload;
+export default SecureUpload;

@@ -37,7 +37,7 @@ function decodePolyline(t: string, e: number = 5) {
 }
 import { Toast } from "@/lib/toast";
 import PressableScale from "@/components/ui/PressableScale";
-import CloudinaryUpload from "@/Helpers/imageUpload";
+import SecureUpload from "@/Helpers/imageUpload";
 import { useRejectDelivery } from "@/hooks/mutations/useRejectDelivery";
 import { useRiderStore } from "@/stores/useRiderStore";
 import { useRiderOrders } from "@/hooks/queries/useRiderData";
@@ -365,9 +365,9 @@ export default function ActiveDelivery() {
 
       if (!result.canceled) {
         const photoUri = result.assets[0].uri;
-        // Upload proof photo to Cloudinary
+        // Upload proof photo securely to S3
         try {
-          const uploadResult = await CloudinaryUpload(photoUri, `proof_${activeOrder?.id}`);
+          const uploadResult = await SecureUpload(photoUri, `proof_${activeOrder?.id}`, getToken);
           const proofUrl = uploadResult?.secure_url || null;
           updateDeliveryStatus("delivered", proofUrl);
         } catch (uploadErr) {

@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { UIThemeContext } from "@/context/ThemeContext";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
-import { BRAND } from "@/constants/brandColors";
+import { BRAND, TOAST } from "@/constants/brandColors";
 import { Ionicons } from "@expo/vector-icons";
 import { useRiderReviews } from "@/hooks/queries/useRiderData";
 import { RiderReviewsSkeleton } from "@/components/skeletons/ContextualSkeletons";
@@ -13,7 +13,7 @@ export default function Reviews() {
   const { currentTheme } = useContext(UIThemeContext);
   const darkTheme = currentTheme === "dark";
   const router = useRouter();
-  const { data: reviewsData, isLoading } = useRiderReviews();
+  const { data: reviewsData, isLoading, isError, refetch } = useRiderReviews();
 
   const renderDistributionBar = (stars: number, count: number, total: number) => {
     const percentage = total > 0 ? (count / total) * 100 : 0;
@@ -55,6 +55,24 @@ export default function Reviews() {
 
       {isLoading ? (
           <RiderReviewsSkeleton />
+      ) : isError ? (
+          <View className="flex-1 items-center justify-center p-6">
+              <Ionicons name="alert-circle-outline" size={64} color={TOAST.error} />
+              <Text className={`text-lg font-bold mt-4 mb-2 text-center ${darkTheme ? "text-white" : "text-black"}`}>
+                  Failed to load reviews
+              </Text>
+              <Text className={`text-center mb-6 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                  We couldn't retrieve your customer feedback right now. Please check your connection and try again.
+              </Text>
+              <TouchableOpacity 
+                  onPress={() => refetch()}
+                  className="px-6 py-3 rounded-full flex-row items-center justify-center"
+                  style={{ backgroundColor: BRAND.primary }}
+              >
+                  <Ionicons name="refresh" size={20} color="#fff" style={{ marginRight: 8 }} />
+                  <Text className="text-white font-bold text-base">Try Again</Text>
+              </TouchableOpacity>
+          </View>
       ) : (
           <ScrollView contentContainerStyle={{ paddingBottom: 120 }} className="flex-1 px-4 pt-2">
             {/* Overall Rating Card */}

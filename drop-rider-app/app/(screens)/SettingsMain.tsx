@@ -23,7 +23,7 @@ import { Toast } from "@/lib/toast";
 import { BRAND } from "@/constants/brandColors";
 import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
-import CloudinaryUpload from "@/Helpers/imageUpload";
+import SecureUpload from "@/Helpers/imageUpload";
 import { Popup } from "@/lib/popup";
 import { RiderSettingsSkeleton } from "@/components/skeletons/ContextualSkeletons";
 
@@ -52,8 +52,8 @@ export default function SettingsMain() {
                 setIsUploadingPic(true);
                 const imageUri = result.assets[0].uri;
                 
-                // Upload to Cloudinary
-                const uploadedData = await CloudinaryUpload(imageUri, `rider_avatar_${user?.id}`);
+                // Upload securely to backend S3
+                const uploadedData = await SecureUpload(imageUri, `rider_avatar_${user?.id}`, getToken);
                 
                 if (uploadedData && uploadedData.secure_url) {
                     const secureUrl = uploadedData.secure_url;

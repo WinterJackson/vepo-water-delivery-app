@@ -24,6 +24,8 @@ from schemas.order_schema import OrderWithDetails
 from schemas.order_schema import OrderWithDetails
 from schemas.deliverer_schemas import DelivererProfileResponse
 from dependencies.auth_dependencies import get_current_rider
+from fastapi import UploadFile, File
+
 router = APIRouter()
 
 
@@ -303,3 +305,26 @@ async def rider_reviews(
 ):
     clerk_id = user["sub"]
     return await get_deliverer_reviews(session=db, clerk_id=clerk_id)
+
+
+@router.post("/upload_proof")
+async def upload_proof(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_current_rider),
+):
+    """Secure endpoint for riders to upload proof of delivery photos to AWS S3."""
+    clerk_id = user["sub"]
+    
+    # Optional check: ensure it's a valid rider
+    deliverer = await get_deliverer_by_clerk_id(session=db, clerk_id=clerk_id)
+    if not deliverer:
+        raise HTTPException(status_code=404, detail="Rider not found")
+
+    from utils.s3_utils import upload_file_to_s3
+    url = await upload_file_to_s3(file, prefix="deliveries/proof")
+    
+    if not url:
+        raise HTTPException(status_code=500, detail="Failed to upload proof photo securely")
+        
+    return {"url": url, "secure_url": url}

@@ -90,30 +90,29 @@ async def handle_mpesa_topup_callback(session: AsyncSession, payload: dict):
         return {"status": "failed"}
 
 async def initiate_wallet_withdrawal(session: AsyncSession, user_id: str, user_type: str, amount: float, phone: str):
-    # Minimum limit
+    import re
     if amount < 500:
         raise HTTPException(status_code=400, detail="Minimum withdrawal amount is 500 KSH.")
-        
-    # Check balance
+
+    if not re.match(r"^254[17]\d{8}$", phone):
+        raise HTTPException(status_code=400, detail="Phone number must be in the format 2547XXXXXXXX or 2541XXXXXXXX.")
+
     model_map = {"vendor": Vendor, "rider": Deliverer, "customer": User}
     model = model_map.get(user_type.lower())
     if model is None:
         raise HTTPException(status_code=400, detail="Invalid user_type for withdrawal.")
 
-    result = await session.execute(
-        select(model).where(model.clerk_id == user_id).with_for_update()
-    )
+    # Lock the row for the duration of this transaction to prevent concurrent double-withdrawal
+    result = await session.execute(select(model).where(model.clerk_id == user_id).with_for_update())
     user = result.scalars().first()
-    
     if not user:
         raise HTTPException(status_code=404, detail="User not found.")
-        
+
     current_balance = float(user.wallet_balance or 0)
     if current_balance < amount:
         raise HTTPException(status_code=400, detail="Insufficient wallet balance.")
-        
+
     transaction_fee = 15.0
-    
     if user_type.lower() == "vendor":
         threshold = 5000.0 if getattr(user, "vendor_type", "") == "wholesale_b2b" else 2500.0
         if current_balance >= threshold:
@@ -122,46 +121,46 @@ async def initiate_wallet_withdrawal(session: AsyncSession, user_id: str, user_t
         if current_balance >= 1000.0:
             transaction_fee = 0.0
     elif user_type.lower() == "customer":
-        transaction_fee = 0.0  # No network fee levied on customer float withdrawals
+        transaction_fee = 0.0
 
     if amount <= transaction_fee:
         raise HTTPException(status_code=400, detail=f"Withdrawal amount must be greater than network fee (KSH {transaction_fee}).")
 
-    # Deduct full requested amount from balance (the fee is embedded in this deduction)
     user.wallet_balance = current_balance - amount
-    
     disbursement_amount = amount - transaction_fee
 
-    # Log pending withdrawal
     transaction = WalletTransaction(
         user_id=user_id,
         user_type=UserType[user_type.lower()],
         transaction_type=TransactionType.withdrawal,
-        amount=amount, # Total deducted from wallet
+        amount=amount,
         status=TransactionStatus.pending,
-        description=f"M-Pesa B2C Withdrawal (Net: {disbursement_amount}, Fee: {transaction_fee})"
+        description=f"M-Pesa B2C Withdrawal (Net: {disbursement_amount}, Fee: {transaction_fee})",
     )
     session.add(transaction)
     await session.commit()
     await session.refresh(transaction)
-    
-    # Initiate B2C
+
     response = await initiate_b2c_payout(phone=phone, amount=disbursement_amount, payout_id=str(transaction.id))
-    
+
     if not response.get("success"):
-        # Revert deduction
-        user.wallet_balance = current_balance
+        # Re-fetch and lock again — never trust the stale `current_balance` closure on revert,
+        # since another transaction may have touched this wallet in the meantime.
+        result = await session.execute(select(model).where(model.clerk_id == user_id).with_for_update())
+        fresh_user = result.scalars().first()
+        fresh_user.wallet_balance = float(fresh_user.wallet_balance or 0) + amount
         transaction.status = TransactionStatus.failed
         transaction.failure_reason = response.get("error")
         await session.commit()
         raise HTTPException(status_code=400, detail=response.get("error", "Withdrawal failed"))
-        
+
+    # Safaricom has only ACCEPTED the request into its queue here — real confirmation
+    # arrives asynchronously via the B2C result callback. Do NOT mark completed yet.
     transaction.reference_id = response.get("ConversationID")
-    # For now assume success immediately, or wait for B2C callback
-    transaction.status = TransactionStatus.completed
+    transaction.status = TransactionStatus.processing
     await session.commit()
-    
-    return {"message": "Withdrawal processed successfully", "transaction": transaction}
+
+    return {"message": "Withdrawal is processing and will complete shortly", "transaction": transaction}
 
 async def get_wallet_transactions(session: AsyncSession, user_id: str, limit: int = 50, offset: int = 0, search: str = None, transaction_type: str = None):
     query = select(WalletTransaction).where(WalletTransaction.user_id == user_id)

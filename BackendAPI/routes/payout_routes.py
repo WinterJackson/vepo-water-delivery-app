@@ -37,6 +37,37 @@ async def fetch_payouts(
 # ── M-Pesa B2C Callback Endpoints ─────────────────────────────────────────────
 # These are called by Safaricom servers when a B2C transaction completes or times out.
 
+async def _reconcile_wallet_transaction(session, conversation_id: str, success: bool, result_desc: str, mpesa_receipt: str | None):
+    from sqlalchemy.future import select
+    from models.wallet_transaction_model import WalletTransaction, TransactionStatus, UserType
+    from models.user_model import User
+    from models.vendor_model import Vendor
+    from models.deliverer_model import Deliverer
+
+    stmt = select(WalletTransaction).where(
+        WalletTransaction.reference_id == conversation_id,
+        WalletTransaction.status == TransactionStatus.processing,
+    ).with_for_update()
+    tx = (await session.execute(stmt)).scalars().first()
+    if not tx:
+        return False  # not ours — let the Payout-table lookup handle it
+
+    if success:
+        tx.status = TransactionStatus.completed
+        tx.mpesa_receipt_number = mpesa_receipt
+    else:
+        # Real payout failed after we'd already deducted the wallet balance — refund it now.
+        model = {"vendor": Vendor, "rider": Deliverer, "customer": User}[tx.user_type.value]
+        result = await session.execute(select(model).where(model.clerk_id == tx.user_id).with_for_update())
+        user = result.scalars().first()
+        if user:
+            user.wallet_balance = float(user.wallet_balance or 0) + float(tx.amount)
+        tx.status = TransactionStatus.failed
+        tx.failure_reason = result_desc
+
+    await session.commit()
+    return True
+
 
 @router.post("/mpesa/b2c_result")
 async def b2c_result_callback(request: Request, session: AsyncSession = Depends(get_db)):
@@ -60,6 +91,10 @@ async def b2c_result_callback(request: Request, session: AsyncSession = Depends(
         if not conversation_id:
             logger.error("B2C result callback missing ConversationID")
             return JSONResponse(status_code=400, content={"message": "Missing ConversationID"})
+            
+        handled = await _reconcile_wallet_transaction(session, conversation_id, result_code == 0, result_desc, mpesa_receipt=None)
+        if handled:
+            return {"message": "Wallet transaction reconciled"}
 
         # Find the payout record by ConversationID
         from sqlalchemy.future import select
@@ -143,6 +178,10 @@ async def b2c_timeout_callback(request: Request, session: AsyncSession = Depends
         conversation_id = data.get("Result", {}).get("ConversationID")
 
         if conversation_id:
+            handled = await _reconcile_wallet_transaction(session, conversation_id, success=False, result_desc="M-Pesa B2C request timed out", mpesa_receipt=None)
+            if handled:
+                return {"message": "Wallet transaction timeout reconciled"}
+
             from sqlalchemy.future import select
             from models.payout_model import Payout
             stmt = select(Payout).where(Payout.conversation_id == conversation_id)

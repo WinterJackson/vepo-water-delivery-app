@@ -7,7 +7,7 @@ import { useAuth } from "@clerk/clerk-expo";
 import PressableScale from "@/components/ui/PressableScale";
 import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
 import * as ImagePicker from "expo-image-picker";
-import CloudinaryUpload from "@/Helpers/imageUpload";
+import SecureUpload from "@/Helpers/imageUpload";
 import { Toast } from "@/lib/toast";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { BRAND, TOAST } from "@/constants/brandColors";
@@ -75,11 +75,11 @@ export default function BottleRejection() {
     try {
       const token = await getToken();
 
-      // Upload photos to cloudinary first
+      // Upload photos securely to S3 first
       Toast.info("Uploading...", "Uploading evidence photos...");
       const uploadedUrls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
-         const uploadResult = await CloudinaryUpload(photos[i], `reject_${orderId}_${i}`);
+         const uploadResult = await SecureUpload(photos[i], `reject_${orderId}_${i}`, getToken);
          if (uploadResult?.secure_url) {
              uploadedUrls.push(uploadResult.secure_url);
          }
