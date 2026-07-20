@@ -57,3 +57,9 @@ recent_crash.txt
 *.log
 **/.vscode/
 **/tsconfig.tsbuildinfo
+
+# ── Scratch & Test Scripts ──
+test_*.py
+check_*.py
+scripts/
+venv/
