@@ -16,6 +16,8 @@ export interface RiderOrder {
     rider_commission?: number;
     payload_surcharge?: number;
     staircase_surcharge?: number;
+    vendor_net?: number;
+    platform_total?: number;
     distance_km?: number;
     delivery_fee?: number;
     created_at?: string;
@@ -194,7 +196,7 @@ export function useAcceptOrder() {
     return useMutation({
         mutationFn: async (orderId: string) => {
             const token = await getToken();
-            const route = RiderApiRoutes.AcceptOrderRadar(orderId);
+            const route = RiderApiRoutes.AcceptDelivery(orderId);
             const res = await fetch(`${route.path}`, {
                 method: route.method,
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

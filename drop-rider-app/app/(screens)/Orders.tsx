@@ -71,7 +71,9 @@ export default function Orders() {
     o.order_status === "pending" || 
     o.order_status === "accepted" || 
     o.order_status === "ready" || 
-    o.order_status === "picked_up"
+    o.order_status === "picked_up" ||
+    o.order_status === "mismatch_pending" ||
+    o.order_status === "pending_review"
   );
 
   // WebSocket hook for real-time order updates
@@ -193,6 +195,15 @@ export default function Orders() {
               </Text>
           </View>
       </View>
+
+      {!connected && (
+          <View className={`px-4 py-2 flex-row justify-center items-center ${darkTheme ? "bg-red-900/50" : "bg-red-100"}`}>
+             <Ionicons name="cloud-offline" size={16} color={darkTheme ? "#fca5a5" : "#ef4444"} />
+             <Text className={`ml-2 text-xs font-bold ${darkTheme ? "text-red-200" : "text-red-600"}`}>
+                Offline Mode - Reconnecting...
+             </Text>
+          </View>
+      )}
 
       <View className="flex-row px-5 py-3">
          <PressableScale onPress={() => setTab("Incoming")} className="mr-4">

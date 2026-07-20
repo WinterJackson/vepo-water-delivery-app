@@ -229,7 +229,6 @@ export default function ActiveDelivery() {
   const fetchRoute = async (startLng: number, startLat: number, endLng: number, endLat: number) => {
     try {
       // 🔴 PRODUCTION GOOGLE MAPS MODE 
-      /*
       if (!GOOGLE_MAPS_API_KEY) {
         if (__DEV__) console.warn("Google Maps API Key missing for routing.");
         return;
@@ -238,16 +237,6 @@ export default function ActiveDelivery() {
       const data = await response.json();
       if (data.routes && data.routes.length > 0) {
         const encodedPolyline = data.routes[0].overview_polyline.points;
-        const coords = decodePolyline(encodedPolyline);
-        setRouteCoords(coords);
-      }
-      */
-
-      // 🟢 FREE OPEN SOURCE MVP MODE 
-      const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=polyline`);
-      const data = await response.json();
-      if (data.routes && data.routes.length > 0) {
-        const encodedPolyline = data.routes[0].geometry;
         const coords = decodePolyline(encodedPolyline);
         setRouteCoords(coords);
       }
@@ -362,6 +351,11 @@ export default function ActiveDelivery() {
         aspect: [4, 3],
         quality: 0.5,
       });
+
+      if (result.canceled) {
+        Toast.info("Canceled", "Proof of delivery photo capture was canceled.");
+        return;
+      }
 
       if (!result.canceled) {
         const photoUri = result.assets[0].uri;

@@ -3,10 +3,10 @@ import { Toast } from '@/lib/toast';
 
 const SecureUpload = async (uri: string, name: string | null | undefined, getToken: () => Promise<string | null>) => {
   const formData = new FormData();
-  const fileName = name ? name.split('.')[0] + '.webp' : 'delivery_proof.webp';
-
-  // Compress and convert to WebP before uploading (performance + bandwidth optimization)
   let processedUri = uri;
+  let mimeType = 'image/webp';
+  let processedName = name ? name.split('.')[0] + '.webp' : 'delivery_proof.webp';
+
   try {
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
@@ -16,12 +16,15 @@ const SecureUpload = async (uri: string, name: string | null | undefined, getTok
     processedUri = manipResult.uri;
   } catch (e) {
     console.warn("Failed to compress to WebP, falling back to original", e);
+    // Fall back to jpeg as standard if WebP fails
+    mimeType = 'image/jpeg';
+    processedName = name ? name.split('.')[0] + '.jpg' : 'delivery_proof.jpg';
   }
 
   const file = {
     uri: processedUri,
-    type: 'image/webp',
-    name: fileName,
+    type: mimeType,
+    name: processedName,
   };
 
   formData.append('file', file as any);

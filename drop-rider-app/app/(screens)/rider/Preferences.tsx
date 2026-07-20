@@ -43,7 +43,7 @@ export default function Preferences() {
             return res.json();
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["riderProfile"] });
+            queryClient.invalidateQueries({ queryKey: ["rider", "profile"] });
         },
         onError: () => {
              Toast.error("Error", "Could not update preferences.");

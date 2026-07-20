@@ -2,11 +2,13 @@ import { useAuth } from '@clerk/clerk-expo';
 import NetInfo from '@react-native-community/netinfo';
 import { useEffect } from 'react';
 import { getQueuedActions, removeQueuedAction } from '../config/database';
+import { useQueryClient } from '@tanstack/react-query';
 
 const BASE_URL = process.env.EXPO_PUBLIC_BACKEND_BASE_URL;
 
 export function useNetworkQueue() {
     const { getToken } = useAuth();
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         const unsubscribe = NetInfo.addEventListener(async (state: any) => {
@@ -36,6 +38,10 @@ export function useNetworkQueue() {
                             if (res.ok) {
                                 await removeQueuedAction(action.id);
                                 if (__DEV__) console.log(`Successfully flushed queued action: ${action.id}`);
+                                queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
+                            } else if (res.status === 400 || res.status === 404 || res.status === 409) {
+                                await removeQueuedAction(action.id);
+                                if (__DEV__) console.log(`Dropped invalid queued action: ${action.id} due to ${res.status}`);
                             }
                         }
                     } catch (e) {

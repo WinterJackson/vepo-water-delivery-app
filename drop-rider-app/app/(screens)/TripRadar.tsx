@@ -40,6 +40,8 @@ interface RadarOrder {
   estimated_minutes: number;
   items_count: number;
   weight_kg: number;
+  vendor_net?: number;
+  platform_total?: number;
   delivery_type: "quick_swap" | "keep_my_bottle";
   payment_method: "cash" | "mpesa";
   vehicle_class: string;
@@ -135,6 +137,8 @@ export default function TripRadar() {
           estimated_minutes: updateData.estimated_minutes || 0,
           items_count: updateData.items_count || updateData.quantity || 0,
           weight_kg: updateData.weight_kg || 0,
+          vendor_net: updateData.vendor_net || 0,
+          platform_total: updateData.platform_total || 0,
           delivery_type: updateData.delivery_type || "quick_swap",
           payment_method: updateData.payment_method || "mpesa",
           vehicle_class: updateData.vehicle_class || "motorbike",
@@ -366,11 +370,6 @@ export default function TripRadar() {
     >
       <View className="flex-row justify-between items-start">
         <View className="flex-1">
-          <View className="flex-row items-center mb-1">
-            <View className={`px-2 py-0.5 rounded border ${darkTheme ? "bg-blue-900/40 border-blue-900/60" : "bg-blue-50 border-blue-100"}`}>
-               <Text className={`text-[10px] font-bold uppercase text-primary`}>⚡ Gold Priority Ping</Text>
-            </View>
-          </View>
           <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
             {item.vendor?.business_name || "Unknown Vendor"}
           </Text>
@@ -529,17 +528,17 @@ export default function TripRadar() {
                  <Text className={`font-bold text-sm ${darkTheme ? "text-amber-500" : "text-amber-700"}`}>Cash Order</Text>
                </View>
                <Text className={`text-xs mb-2 ${darkTheme ? "text-amber-200/70" : "text-amber-700/80"}`}>
-                 You must have enough funds in your Wallet to cover the platform's commission (KES 20) to accept this cash order.
+                 You must have enough funds in your Wallet to cover the vendor net pay and platform's commission (KSH {((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)).toFixed(2)}) to accept this cash order.
                </Text>
                <View className="flex-row items-center justify-between mt-2 pt-2 border-t border-amber-500/20">
                  <Text className={`text-xs font-semibold ${darkTheme ? "text-amber-200" : "text-amber-800"}`}>Your Wallet Balance:</Text>
-                 <Text className={`text-sm font-bold ${walletBalance >= 19 ? (darkTheme ? "text-green-400" : "text-green-600") : "text-red-500"}`}>
+                 <Text className={`text-sm font-bold ${walletBalance >= ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)) ? (darkTheme ? "text-green-400" : "text-green-600") : "text-red-500"}`}>
                    KSH {walletBalance.toFixed(2)}
                  </Text>
                </View>
-               {walletBalance < 19 && (
+               {walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)) && (
                  <Text className="text-red-500 text-xs font-bold mt-2">
-                   Shortfall: KSH {(19 - walletBalance).toFixed(2)}. Please top up or complete cashless orders.
+                   Shortfall: KSH {(((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)) - walletBalance).toFixed(2)}. Please top up or complete cashless orders.
                  </Text>
                )}
             </View>
@@ -547,18 +546,18 @@ export default function TripRadar() {
 
           <TouchableOpacity
             onPress={() => acceptOrder(selectedOrder.id)}
-            disabled={acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)}
-            className={`py-4 rounded-2xl items-center flex-row justify-center mb-10 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "bg-gray-800" : "bg-gray-300") : "bg-primary"}`}
+            disabled={acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)))}
+            className={`py-4 rounded-2xl items-center flex-row justify-center mb-10 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)))) ? (darkTheme ? "bg-gray-800" : "bg-gray-300") : "bg-primary"}`}
             style={{ elevation: 2, shadowColor: BRAND.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }}
           >
             {acceptingId === selectedOrder.id ? (
               <ActivityIndicator color={BRAND.white} />
             ) : (
               <>
-                <Text className={`text-lg font-bold mr-2 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "text-gray-500" : "text-gray-500") : "text-white"}`}>
-                  {selectedOrder.payment_method === "cash" && walletBalance < 19 ? "Insufficient Float" : "Accept Trip"}
+                <Text className={`text-lg font-bold mr-2 ${(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)))) ? (darkTheme ? "text-gray-500" : "text-gray-500") : "text-white"}`}>
+                  {selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)) ? "Insufficient Float" : "Accept Trip"}
                 </Text>
-                <Ionicons name={(selectedOrder.payment_method === "cash" && walletBalance < 19) ? "lock-closed" : "checkmark-circle-outline"} size={20} color={(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < 19)) ? (darkTheme ? "#6b7280" : "#6b7280") : BRAND.white} />
+                <Ionicons name={(selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0))) ? "lock-closed" : "checkmark-circle-outline"} size={20} color={(acceptingId === selectedOrder.id || (selectedOrder.payment_method === "cash" && walletBalance < ((selectedOrder.vendor_net || 0) + (selectedOrder.platform_total || 0)))) ? (darkTheme ? "#6b7280" : "#6b7280") : BRAND.white} />
               </>
             )}
           </TouchableOpacity>

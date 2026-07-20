@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
 import * as Location from "expo-location";
+import { Alert } from "react-native";
 
 interface RiderState {
   isOnline: boolean;
@@ -77,6 +78,11 @@ export const useRiderStore = create<RiderState>((set, get) => ({
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({ lat: loc.coords.latitude, lng: loc.coords.longitude }),
           });
+        } else {
+          Alert.alert("Permission Required", "Location access is required to go online.");
+          set({ isOnline: previousState });
+          await SecureStore.setItemAsync("rider_availability", String(previousState));
+          return;
         }
       }
 

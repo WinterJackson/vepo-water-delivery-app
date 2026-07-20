@@ -61,7 +61,7 @@ export default function BankDetails() {
             });
 
             if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: ["riderProfile"] });
+                queryClient.invalidateQueries({ queryKey: ["rider", "profile"] });
                 Toast.success("Added", "Payout method added.");
                 setIsAdding(false);
                 setNewPhone("");
@@ -103,7 +103,7 @@ export default function BankDetails() {
                     });
 
                     if (res.ok) {
-                        queryClient.invalidateQueries({ queryKey: ["riderProfile"] });
+                        queryClient.invalidateQueries({ queryKey: ["rider", "profile"] });
                         Toast.success("Removed", "Payout method removed.");
                     } else {
                         Toast.error("Error", "Could not remove payout method.");

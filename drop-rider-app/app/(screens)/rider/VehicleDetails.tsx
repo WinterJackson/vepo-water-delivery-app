@@ -43,7 +43,7 @@ export default function VehicleDetails() {
             });
 
             if (res.ok) {
-                queryClient.invalidateQueries({ queryKey: ["riderProfile"] });
+                queryClient.invalidateQueries({ queryKey: ["rider", "profile"] });
                 Toast.success("Saved", "Vehicle parameters updated successfully.");
             } else {
                 Toast.error("Error", "Could not update vehicle profile.");

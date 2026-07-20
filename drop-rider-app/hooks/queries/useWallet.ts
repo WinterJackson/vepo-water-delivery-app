@@ -5,7 +5,7 @@ import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
 import { useInfiniteQuery } from "@tanstack/react-query";
 
 export const useWalletTransactions = (limit = 50, offset = 0) => {
-  const { getToken } = useAuth();
+  const { getToken, signOut } = useAuth();
 
   return useQuery({
     queryKey: ["walletTransactions", limit, offset],
@@ -17,6 +17,11 @@ export const useWalletTransactions = (limit = 50, offset = 0) => {
         headers: { Authorization: `Bearer ${token}` },
       });
 
+      if (res.status === 401) {
+        signOut();
+        throw new Error("Session Expired");
+      }
+
       if (!res.ok) {
         throw new Error("Failed to fetch transactions");
       }
@@ -27,7 +32,7 @@ export const useWalletTransactions = (limit = 50, offset = 0) => {
 };
 
 export const useWalletTransactionsPaginated = (search: string, type: string, limit = 20) => {
-  const { getToken } = useAuth();
+  const { getToken, signOut } = useAuth();
 
   return useInfiniteQuery({
     queryKey: ["walletTransactions", search, type, limit],
@@ -42,6 +47,11 @@ export const useWalletTransactionsPaginated = (search: string, type: string, lim
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
       });
+
+      if (res.status === 401) {
+        signOut();
+        throw new Error("Session Expired");
+      }
 
       if (!res.ok) {
         throw new Error("Failed to fetch transactions");
@@ -82,7 +92,7 @@ export const useWalletWithdraw = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["walletTransactions"] });
-      queryClient.invalidateQueries({ queryKey: ["riderProfile"] });
+      queryClient.invalidateQueries({ queryKey: ["rider", "profile"] });
     },
   });
 };

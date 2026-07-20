@@ -45,10 +45,6 @@ const RiderApiRoutes = {
     path: `${BASE_URL}/api/rider/trip-radar`,
     method: "GET",
   } as const satisfies ApiRoute,
-  AcceptOrderRadar: (orderId: string): ApiRoute => ({
-    path: `${BASE_URL}/api/rider/trip-radar/${orderId}/accept`,
-    method: "POST",
-  }),
   // --- Earnings ---
   GetEarnings: {
     path: `${BASE_URL}/api/rider/earnings`,
