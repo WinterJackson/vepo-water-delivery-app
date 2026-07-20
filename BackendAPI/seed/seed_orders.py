@@ -45,12 +45,12 @@ async def seed_orders():
         deliverers = result.scalars().all()
 
         statuses = [
-            ("completed", "completed", "mpesa"),
-            ("completed", "completed", "cash"),
-            ("in_transit", "paid", "mpesa"),
+            ("delivered", "paid", "mpesa"),
+            ("delivered", "paid", "cash"),
+            ("picked_up", "paid", "mpesa"),
             ("cancelled", "failed", "cash"),
             ("picked_up", "paid", "card"),
-            ("completed", "completed", "card"),
+            ("delivered", "paid", "card"),
         ]
 
         print(f"Seeding {len(statuses)} realistic orders...")
@@ -59,8 +59,32 @@ async def seed_orders():
             vendor = random.choice(vendors)
             deliverer = random.choice(deliverers) if deliverers else None
             
+            order_id = uuid.uuid4()
+            
+            # Generate items first to calculate the correct total
+            order_items = []
+            total_items_subtotal = 0.0
+            
+            for _ in range(random.randint(1, 3)):
+                prod = random.choice(products)
+                qty = random.randint(1, 5)
+                subtotal = prod.price * qty
+                total_items_subtotal += subtotal
+                
+                order_item = OrderItem(
+                    order_id=order_id,
+                    product_id=prod.id,
+                    quantity=qty,
+                    price=prod.price,
+                    Subtotal=subtotal
+                )
+                order_items.append(order_item)
+                
+            delivery_fee = 150.0
+            total_amount = total_items_subtotal + delivery_fee
+            
             order = Order(
-                id=uuid.uuid4(),
+                id=order_id,
                 customer_id=user.id,
                 vendor_id=vendor.id,
                 deliverer_id=deliverer.id if deliverer else None,
@@ -69,29 +93,19 @@ async def seed_orders():
                 lng_from=vendor.lng,
                 lat=user.lat,
                 lng=user.lng,
-                total_amount=round(random.uniform(500, 3500), 2),
+                total_amount=total_amount,
                 order_status=status,
                 payment_status=payment_status,
                 payment_method=payment_method,
-                delivery_fee=150.0,
+                delivery_fee=delivery_fee,
                 delivery_time=random.randint(15, 60),
                 created_at=datetime.now(timezone.utc) - timedelta(days=random.randint(0, 30))
             )
             session.add(order)
             await session.flush()
 
-            # Add OrderItems
-            for _ in range(random.randint(1, 3)):
-                prod = random.choice(products)
-                qty = random.randint(1, 5)
-                order_item = OrderItem(
-                    order_id=order.id,
-                    product_id=prod.id,
-                    quantity=qty,
-                    price=prod.price,
-                    Subtotal=prod.price * qty
-                )
-                session.add(order_item)
+            for item in order_items:
+                session.add(item)
         
         await session.commit()
         print("✅ Orders seeded successfully!")

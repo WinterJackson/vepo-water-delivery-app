@@ -8,6 +8,8 @@ import Animated, {
   withSequence,
   Easing,
 } from 'react-native-reanimated';
+import { UIThemeContext } from '@/context/ThemeContext';
+import { BRAND } from '@/constants/brandColors';
 import { PressableScale } from "@/components/ui/PressableScale";
 import { Image } from 'expo-image';
 
@@ -33,6 +35,8 @@ const MOOD_IMAGES: Record<DropyMood, number> = {
 
 export function DropyScene({ mood, title, subtitle, ctaLabel, onCtaPress }: DropySceneProps) {
   const [reduceMotion, setReduceMotion] = React.useState(false);
+  const { currentTheme } = React.useContext(UIThemeContext);
+  const darkTheme = currentTheme === 'dark';
 
   // Animation values
   const translateY = useSharedValue(20);
@@ -112,12 +116,12 @@ export function DropyScene({ mood, title, subtitle, ctaLabel, onCtaPress }: Drop
         />
       </Animated.View>
       
-      <Text className="text-xl font-bold text-gray-800 text-center mb-2" accessibilityRole="header">
+      <Text className={`text-xl font-bold text-center mb-2 ${darkTheme ? 'text-white' : 'text-slate-900'}`} accessibilityRole="header">
         {title}
       </Text>
       
       {subtitle && (
-        <Text className="text-base text-gray-500 text-center mb-6">
+        <Text className={`text-base text-center mb-6 ${darkTheme ? 'text-slate-400' : 'text-slate-500'}`}>
           {subtitle}
         </Text>
       )}
@@ -125,12 +129,12 @@ export function DropyScene({ mood, title, subtitle, ctaLabel, onCtaPress }: Drop
       {ctaLabel && onCtaPress && (
         <PressableScale
           onPress={onCtaPress}
-          className="bg-sky-500 px-6 py-3 rounded-xl w-full max-w-[250px]"
+          className="px-6 py-3 rounded-xl w-full max-w-[250px]"
           accessibilityRole="button"
           accessibilityLabel={ctaLabel}
-          style={{ minHeight: 44, justifyContent: 'center' }}
+          style={{ minHeight: 44, justifyContent: 'center', backgroundColor: BRAND.primary }}
         >
-          <Text className="text-white font-semibold text-center">{ctaLabel}</Text>
+          <Text className="text-white font-bold text-center">{ctaLabel}</Text>
         </PressableScale>
       )}
     </View>

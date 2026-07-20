@@ -49,7 +49,7 @@ export interface Product {
 
 export type OrderStatus = 
   | "pending" | "confirmed" | "preparing" | "ready" 
-  | "picked_up" | "in_transit" | "delivered" | "cancelled";
+  | "picked_up" | "delivered" | "cancelled";
 
 export interface OrderItem {
   id: string;

@@ -149,7 +149,7 @@ export default function MyMap() {
 
     const activeOrders = useMemo(() => {
         let filtered = orders.filter(
-            (o: any) => ["pending", "accepted", "ready", "picked_up", "in_transit"].includes(o.order_status)
+            (o: any) => ["pending", "accepted", "ready", "picked_up"].includes(o.order_status)
         );
         if (debouncedSearchQuery) {
             const lowerQuery = debouncedSearchQuery.toLowerCase();
@@ -198,7 +198,7 @@ export default function MyMap() {
 
     const STATUS_COLORS: Record<string, string> = {
         pending: "#f59e0b", accepted: "#3b82f6", ready: "#8b5cf6",
-        picked_up: "#06b6d4", in_transit: "#0ea5e9", delivered: "#22c55e",
+        picked_up: "#06b6d4", delivered: "#22c55e",
     };
 
     const mapOverlays = useMemo(() => {

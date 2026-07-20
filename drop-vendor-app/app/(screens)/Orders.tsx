@@ -26,6 +26,7 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { trackEvent } from "@/utils/analytics";
 import SearchBar from "@/components/common/Search";
 import { ScrollView } from "react-native-gesture-handler";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20",
@@ -34,7 +35,7 @@ const STATUS_COLORS: Record<string, string> = {
   ready: "bg-green-500/20",
   rejected: "bg-red-500/20",
   unassigned: "bg-orange-500/20",
-  in_transit: "bg-blue-500/20",
+
   picked_up: "bg-blue-500/20",
   delivered: "bg-green-500/20",
   cancelled: "bg-red-500/20",
@@ -49,7 +50,7 @@ const STATUS_TEXT: Record<string, string> = {
   ready: "text-green-600",
   rejected: "text-red-600",
   unassigned: "text-orange-600",
-  in_transit: "text-blue-600",
+
   picked_up: "text-blue-600",
   delivered: "text-green-600",
   cancelled: "text-red-600",
@@ -322,12 +323,12 @@ export default function Orders() {
               ))}
             </View>
           ) : (
-            <View className="items-center justify-center pt-24">
-              <View className={`w-20 h-20 rounded-full items-center justify-center mb-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-                 <Ionicons name="receipt-outline" size={40} color={BRAND.primary} />
-              </View>
-              <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>No orders yet</Text>
-              <Text className={`text-base mt-2 text-center px-10 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Orders will appear here once customers place them.</Text>
+            <View className="mt-16">
+              <EmptyState 
+                mood="sad" 
+                title="No orders yet" 
+                subtitle="Orders will appear here once customers place them." 
+              />
             </View>
           )
         }

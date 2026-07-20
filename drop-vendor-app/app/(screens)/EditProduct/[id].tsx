@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import PressableScale from "@/components/ui/PressableScale";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { useQueryClient } from "@tanstack/react-query";
+import { VendorEditProductSkeleton } from "@/components/skeletons/ContextualSkeletons";
 
 export default function EditProduct() {
   const { id } = useLocalSearchParams();
@@ -127,8 +128,15 @@ export default function EditProduct() {
 
   if (loadingData) {
     return (
-      <SafeAreaView className={`flex-1 items-center justify-center ${darkTheme ? "bg-black" : ""}`}>
-        <ActivityIndicator size="large" color={BRAND.primary} />
+      <SafeAreaView className={`flex-1 ${darkTheme ? "bg-black" : ""}`}>
+          <StatusBar translucent backgroundColor={darkTheme ? "black" : "white"} barStyle={darkTheme ? "light-content" : "dark-content"} />
+          <View className="flex-row items-center px-4 py-3 pb-4 mb-2">
+            <PressableScale onPress={() => router.back()} className="mr-4">
+              <BackButtonMinimal />
+            </PressableScale>
+            <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>Edit Product</Text>
+          </View>
+          <VendorEditProductSkeleton />
       </SafeAreaView>
     );
   }

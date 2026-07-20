@@ -7,6 +7,7 @@ import { UIThemeContext } from '../../context/ThemeContext';
 import BackButtonMinimal from '../../components/ui/BackButtonMinimal';
 import { useRiderEarningsHistory, RiderOrder } from '../../hooks/queries/useRiderData';
 import { RiderEarningsHistorySkeleton } from '../../components/skeletons/ContextualSkeletons';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { useRouter } from 'expo-router';
 
 const formatCurrency = (amount: number) => `KSH ${Math.round(amount || 0).toLocaleString()}`;
@@ -198,14 +199,12 @@ export default function EarningsHistory() {
                     isLoading ? (
                         <RiderEarningsHistorySkeleton />
                     ) : (
-                        <View className="items-center justify-center pt-20">
-                            <View className={`w-28 h-28 rounded-full items-center justify-center mb-6 ${darkTheme ? "bg-white/5 border border-white/10" : "bg-white border border-gray-200"}`}>
-                                <Ionicons name="bicycle-outline" size={56} color={BRAND.primary} />
-                            </View>
-                            <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>No Deliveries Yet</Text>
-                            <Text className={`text-center mt-2 px-8 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-                                Your completed deliveries and their exact earnings breakdown will appear here.
-                            </Text>
+                        <View className="mt-10">
+                            <EmptyState 
+                                mood="sad" 
+                                title="No Deliveries Yet" 
+                                subtitle="Your completed deliveries and their exact earnings breakdown will appear here." 
+                            />
                         </View>
                     )
                 }

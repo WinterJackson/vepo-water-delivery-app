@@ -117,7 +117,7 @@ export default function ActiveDelivery() {
   // Sync activeOrder with fetched orders array and allow search
   const activeOrdersList = useMemo(() => {
     let list = orders.filter((o: any) => 
-        ["pending", "picked_up", "accepted", "ready", "mismatch_pending", "pending_review", "in_transit"].includes(o.order_status)
+        ["pending", "picked_up", "accepted", "ready", "mismatch_pending", "pending_review"].includes(o.order_status)
     );
     if (searchQuery) {
         const lowerQ = searchQuery.toLowerCase();
@@ -277,7 +277,7 @@ export default function ActiveDelivery() {
         if (activeOrder.lat_from && activeOrder.lng_from) {
            fetchRoute(currentLocation.longitude, currentLocation.latitude, activeOrder.lng_from, activeOrder.lat_from);
         }
-      } else if (status === "picked_up" || status === "in_transit") {
+      } else if (status === "picked_up") {
         if (activeOrder.lat && activeOrder.lng) {
            fetchRoute(currentLocation.longitude, currentLocation.latitude, activeOrder.lng, activeOrder.lat);
         }
@@ -489,8 +489,8 @@ export default function ActiveDelivery() {
     pending: "New delivery assigned",
     accepted: "Waiting for vendor to prepare",
     ready: "Ready for pickup",
-    picked_up: "On the way to customer",
-    in_transit: "In transit",
+    picked_up: "Picked up",
+    delivered: "Delivered",
     mismatch_pending: "Dispute Paused: Waiting for Customer",
   };
 
@@ -709,11 +709,11 @@ export default function ActiveDelivery() {
                   
                   <PressableScale 
                     onPress={() => openNavigation(activeOrder.lat || -1.2921, activeOrder.lng || 36.8219, "Dropoff")}
-                    className={`flex-1 py-3 rounded-xl items-center border flex-row justify-center gap-1 ${(activeOrder.order_status === "picked_up" || activeOrder.order_status === "in_transit") ? "bg-accentbg/10 border-accentbg/30" : "opacity-30 " + (darkTheme ? "border-outline-variant" : "border-gray-200")}`}
-                    disabled={(activeOrder.order_status !== "picked_up" && activeOrder.order_status !== "in_transit")}
+                    className={`flex-1 py-3 rounded-xl items-center border flex-row justify-center gap-1 ${(activeOrder.order_status === "picked_up") ? "bg-accentbg/10 border-accentbg/30" : "opacity-30 " + (darkTheme ? "border-outline-variant" : "border-gray-200")}`}
+                    disabled={(activeOrder.order_status !== "picked_up")}
                   >
-                    <Ionicons name="location-outline" size={18} color={(activeOrder.order_status === "picked_up" || activeOrder.order_status === "in_transit") ? BRAND.primary : "#9ca3af"} />
-                    <Text className={`font-semibold ${(activeOrder.order_status === "picked_up" || activeOrder.order_status === "in_transit") ? "text-accentbg" : darkTheme ? "text-on-surface" : "text-gray-800"}`}>Nav to Dropoff</Text>
+                    <Ionicons name="location-outline" size={18} color={(activeOrder.order_status === "picked_up") ? BRAND.primary : "#9ca3af"} />
+                    <Text className={`font-semibold ${(activeOrder.order_status === "picked_up") ? "text-accentbg" : darkTheme ? "text-on-surface" : "text-gray-800"}`}>Nav to Dropoff</Text>
                   </PressableScale>
                 </View>
 
@@ -811,7 +811,7 @@ export default function ActiveDelivery() {
                     <Text className="text-white font-bold text-lg">Mark as Picked Up</Text>
                   </PressableScale>
                 )}
-                {(activeOrder.order_status === "picked_up" || activeOrder.order_status === "in_transit") && (
+                {(activeOrder.order_status === "picked_up") && (
                   <>
                     {/* Bottle Counter UI */}
                     <View className={`my-4 p-4 rounded-2xl border ${darkTheme ? "bg-white/5 border-white/10" : "bg-white border-gray-200"}`}>
@@ -1019,7 +1019,7 @@ export default function ActiveDelivery() {
             </Text>
             
             <View className="flex-col gap-2 mb-6">
-              {(activeOrder?.order_status === "picked_up" || activeOrder?.order_status === "in_transit") ? (
+              {(activeOrder?.order_status === "picked_up") ? (
                 <>
                   {["vehicle_issue", "accident", "customer_unreachable", "customer_refused", "other"].map((reason) => (
                     <PressableScale

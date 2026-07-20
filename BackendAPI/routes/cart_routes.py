@@ -528,3 +528,20 @@ async def get_order_tracking_logs(
     logs = await fetch_order_tracking_logs(session=db, order_id=order_id)
     return logs
 
+
+class ResolveMismatchPayload(BaseModel):
+    action: str  # "approve_charge" | "leave_ground"
+
+@router.patch("/orders/{order_id}/resolve-mismatch")
+async def customer_resolve_mismatch(
+    order_id: UUID,
+    payload: ResolveMismatchPayload,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_customer),
+):
+    """Customer responds to an Address Mismatch flag"""
+    clerk_id = user["sub"]
+    user_obj = await get_user(session=db, clerk_id=clerk_id)
+    from services.order_service import resolve_address_mismatch
+    result = await resolve_address_mismatch(session=db, user_id=user_obj.id, order_id=order_id, action=payload.action)
+    return result

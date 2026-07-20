@@ -22,6 +22,7 @@ import { randomUUID } from 'expo-crypto';
 import BackButton from "@/components/ui/BackButton";
 import CartItem from "@/components/common/CartItem";
 import { CartItemSkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { EmptyState } from "@/components/ui/EmptyState";
 import Button from "@/components/ui/Button";
 import { useRouter } from "expo-router";
 import Animated, {
@@ -126,12 +127,12 @@ export default function Cart() {
 	const serviceFee = Cart?.service_fee ?? (vendor_type === "wholesale_b2b" ? 50.0 : 12.0);
 	const subtotal = Cart?.total_with_deposit ?? Cart?.total_amount ?? 0;
 	
-	// --- First-Time User Bottle Injection ---
+	// --- Bottle Deposit & Welcome Offer ---
 	let bottle_fee_total = 0.0;
 	let welcome_discount = 0.0;
 	const isFirstTimeUser = User && !User.has_used_welcome_offer;
 
-	if (isFirstTimeUser && deliveryType === 'quick_swap') {
+	if (deliveryType === 'keep_my_bottle' || isFirstTimeUser) {
 		let highest_bottle_price = 0.0;
 		Cart?.cart_item?.forEach((item: any) => {
 			const capacity = item?.product?.capacity || 0;
@@ -143,8 +144,9 @@ export default function Cart() {
 				highest_bottle_price = Math.max(highest_bottle_price, 150.0);
 			}
 		});
-		if (highest_bottle_price > 0) {
-			welcome_discount = highest_bottle_price * 0.30;
+		
+		if (isFirstTimeUser && highest_bottle_price > 0) {
+			welcome_discount = bottle_fee_total * 0.30;
 		}
 	}
 	
@@ -181,7 +183,7 @@ export default function Cart() {
 			user_id: User?.id,
 			lat: User?.lat ?? 0,
 			lng: User?.lng ?? 0,
-			delivery_type: deliveryType,
+			delivery_type: vendor_type === "wholesale_b2b" ? "standard" : deliveryType,
 			payment_method: PaymentMethod || "mpesa"
 		}
 		try {
@@ -200,6 +202,10 @@ export default function Cart() {
 					Toast.error("Session Expired", "Please log in again to continue.");
 					signOut();
 					router.replace("/(Auth)/sign-in/screen");
+				} else if (apiCall.status === 400) {
+					setErrorMessage(response?.detail || "Your delivery address exceeds the allowed distance. Please update your location.");
+					setErrorModal(true);
+					setCheckoutVisible(false);
 				} else {
 					Toast.error("Checkout Failed", response?.detail || "Please try again.");
 				}
@@ -395,30 +401,14 @@ export default function Cart() {
 							>
 							
 							{CartLoaded && Cart === undefined ? (
-								<View className="min-h-full w-full justify-center items-center">
-									<Image source={images.empty_cart} className={`max-w-[300px] max-h-[300px]`}/>
-									<View className={`flex-col gap-1 items-center`}>
-										<Text className={`${darkTheme?"text-white":"text-black"}`}>
-											You've not yet added anything to your cart 
-										</Text>
-										<TouchableOpacity
-											activeOpacity={0.5}
-											onPress={()=>{
-												router.push("/(screens)")
-											}}
-										>
-											<View className={`py-1`}>
-												<Text
-													style={{
-														textDecorationLine: "underline"
-													}}
-													className={`text-accentbg`}
-												>
-													Continue Shopping 
-												</Text>
-											</View>
-										</TouchableOpacity>
-									</View>
+								<View className="mt-10 flex-1">
+									<EmptyState 
+										mood="sad" 
+										title="Your cart is empty" 
+										subtitle="You've not yet added anything to your cart." 
+										ctaLabel="Continue Shopping"
+										onCtaPress={() => router.push("/(screens)")}
+									/>
 								</View>
 							):(
 								<View className="min-h-full  p-4 gap-5 ">

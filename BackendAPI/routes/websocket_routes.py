@@ -41,7 +41,11 @@ class ConnectionManager:
             return
             
         pubsub = r.pubsub()
-        await pubsub.subscribe("ws_events")
+        try:
+            await pubsub.subscribe("ws_events")
+        except Exception as e:
+            logger.warning(f"Redis connection failed. WebSockets will fallback to local-only mode. Error: {e}")
+            return
         
         self.pubsub_task = asyncio.create_task(self._listen_to_pubsub(pubsub))
         logger.info("Redis Pub/Sub WebSocket listener initialized on this worker.")

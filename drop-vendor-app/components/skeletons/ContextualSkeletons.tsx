@@ -234,3 +234,54 @@ export function VendorOnboardingSkeleton() {
         </View>
     );
 }
+
+export function VendorEditProductSkeleton() {
+    const { currentTheme } = useContext(UIThemeContext);
+    const isDark = currentTheme === 'dark';
+
+    return (
+        <View className="flex-1 px-5 pt-6 gap-6">
+            <View>
+                <SkeletonText width={120} className="mb-2 ml-1" />
+                <Skeleton width="100%" height={56} borderRadius={16} />
+            </View>
+            
+            <View>
+                <SkeletonText width={100} className="mb-2 ml-1" />
+                <Skeleton width="100%" height={100} borderRadius={16} />
+            </View>
+
+            <View>
+                <SkeletonText width={120} className="mb-2 ml-1" />
+                <Skeleton width="100%" height={240} borderRadius={16} />
+            </View>
+
+            <View className="flex-row gap-4">
+                <View className="flex-1">
+                    <SkeletonText width={90} className="mb-2 ml-1" />
+                    <Skeleton width="100%" height={56} borderRadius={16} />
+                </View>
+                <View className="flex-1">
+                    <SkeletonText width={80} className="mb-2 ml-1" />
+                    <Skeleton width="100%" height={56} borderRadius={16} />
+                </View>
+            </View>
+
+            <View className="flex-row gap-4">
+                <View className="flex-1">
+                    <SkeletonText width={90} className="mb-2 ml-1" />
+                    <Skeleton width="100%" height={56} borderRadius={16} />
+                </View>
+                <View className="flex-1">
+                    <SkeletonText width={50} className="mb-2 ml-1" />
+                    <Skeleton width="100%" height={56} borderRadius={16} />
+                </View>
+            </View>
+
+            <View>
+                <SkeletonText width={120} className="mb-2 ml-1" />
+                <Skeleton width="100%" height={56} borderRadius={16} />
+            </View>
+        </View>
+    );
+}

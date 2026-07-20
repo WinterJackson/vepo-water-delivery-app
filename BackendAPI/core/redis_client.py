@@ -20,14 +20,27 @@ except Exception as e:
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+redis_is_available = False
+storage_uri = "memory://"
+try:
+    import redis as sync_redis
+    sync_r = sync_redis.Redis.from_url(REDIS_URL, socket_connect_timeout=1)
+    sync_r.ping()
+    storage_uri = REDIS_URL
+    redis_is_available = True
+except Exception:
+    logger.warning("Redis not accessible for rate limiting, falling back to memory://")
+
 # Global Redis-backed Rate Limiter
 redis_limiter = Limiter(
     key_func=get_remote_address, 
     default_limits=["100/minute"],
-    storage_uri=REDIS_URL
+    storage_uri=storage_uri
 )
 
 def get_redis() -> Optional[redis.Redis]:
+    if not redis_is_available:
+        return None
     if not redis_pool:
         return None
     return redis.Redis(connection_pool=redis_pool)
@@ -79,7 +92,11 @@ async def redis_lock(lock_key: str, timeout_seconds: int = 10):
 
     # Generate a random token to ensure we only delete our own lock
     token = str(uuid.uuid4())
-    acquired = await r.set(lock_key, token, ex=timeout_seconds, nx=True)
+    try:
+        acquired = await r.set(lock_key, token, ex=timeout_seconds, nx=True)
+    except Exception as e:
+        logger.warning(f"Redis lock acquisition failed (fallback to open): {e}")
+        acquired = True
     
     try:
         yield acquired

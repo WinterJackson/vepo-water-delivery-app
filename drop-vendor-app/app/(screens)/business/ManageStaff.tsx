@@ -140,7 +140,7 @@ export default function ManageStaff() {
                             />
                         </View>
                         <Text className={`mt-2 text-xs text-center ${darkTheme ? "text-gray-500" : "text-gray-400"}`}>
-                            The staff member must download the Vepo Vendor App and create an account before you can assign them.
+                            The staff member must download the Drop Vendor App and create an account before you can assign them.
                         </Text>
                     </View>
 

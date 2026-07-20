@@ -186,7 +186,12 @@ def calculate_revenue_splits(
     if vendor_type == "wholesale_b2b":
         rider_commission = Decimal("0.00")
     else:
-        commission_rate = Decimal("0.12") if delivery_type == "keep_my_bottle" else Decimal("0.10")
+        # M-09 FIX: Reference the module-level constants instead of inline values
+        # keep_my_bottle adds 2% premium (12% vs 10%) for extra bottle handling
+        if delivery_type == "keep_my_bottle":
+            commission_rate = Decimal(str(GIG_RIDER_COMMISSION)) + Decimal("0.02")
+        else:
+            commission_rate = Decimal(str(GIG_RIDER_COMMISSION))
         rider_commission = (_df * commission_rate).quantize(TWO, rounding=ROUND_HALF_UP)
 
     # ── Wholesale Delivery Markup (5% surcharge on delivery fee) ──
@@ -622,7 +627,11 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
       bottle_fee_total = 0.0
       is_welcome = False
       
-      if user and not getattr(user, 'has_used_welcome_offer', True) and delivery_type == "quick_swap":
+      # 1. Determine if customer needs to pay bottle deposit.
+      # Deposit is required if they selected "keep_my_bottle" OR if it's their first order (no empty bottles to swap).
+      is_first_order = user and not getattr(user, 'has_used_welcome_offer', True)
+      
+      if delivery_type == "keep_my_bottle" or is_first_order:
           highest_bottle_price = 0.0
           for item in pre_order_items:
               product = item.product
@@ -635,8 +644,10 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
                       bottle_fee_total += 150.0 * item.quantity
                       highest_bottle_price = max(highest_bottle_price, 150.0)
           
-          if highest_bottle_price > 0:
-              welcome_discount = round(highest_bottle_price * 0.30, 2)
+          # 2. Apply Welcome Discount ONLY if it's their first order and they are paying a bottle fee
+          if is_first_order and highest_bottle_price > 0:
+              # C-05 FIX: Welcome discount is 30% of the total BOTTLE DEPOSIT
+              welcome_discount = round(bottle_fee_total * 0.30, 2)
               is_welcome = True
               user.has_used_welcome_offer = True
               logger.info(f"Welcome Offer applied for user {user_id}: KSH {welcome_discount:.0f} off on bottle fee of {bottle_fee_total}")
@@ -673,14 +684,29 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
       deliverer_id = None
       initial_status = "unassigned"
 
+      # C-04 FIX: Compute the FULL pre-discount total including bottle fees.
+      # Bottle deposit fees are charged to the customer and credited to the vendor.
+      pre_discount_total = (
+          float(product_total) + delivery["fee"] + revenue["service_fee"] +
+          revenue["surge_fee"] + revenue["delivery_markup"] +
+          total_rider_surcharges + bottle_fee_total
+      )
+
+      # H-06 FIX: Apply welcome_discount FIRST (it reduces the bottle fee component),
+      # then calculate wallet_discount on the remaining total. This prevents the wallet
+      # from over-discounting when both are active.
+      after_welcome = pre_discount_total - welcome_discount
+
       # --- Wallet Discount ---
       wallet_discount = 0.0
       if user and getattr(user, 'wallet_balance', 0) > 0:
-          pre_discount = float(product_total) + delivery["fee"] + revenue["service_fee"] + revenue["surge_fee"] + revenue["delivery_markup"] + total_rider_surcharges
-          max_discount = max(0.0, float(pre_discount) - 1.0)
+          # Ensure at least KSh 1 remains after all discounts (prevents zero-amount orders)
+          max_discount = max(0.0, after_welcome - 1.0)
           wallet_discount = min(float(user.wallet_balance), max_discount)
           # Deduct only what we used
           user.wallet_balance = float(user.wallet_balance) - wallet_discount
+
+      final_total = after_welcome - wallet_discount
 
       order = Order(
         customer_id = user_id,
@@ -696,7 +722,7 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
         distance_km = delivery["distance_km"],
         phone = phone,
         delivery_address = user.location_address if user else None,
-        total_amount = float(product_total) + delivery["fee"] + revenue["service_fee"] + revenue["surge_fee"] + revenue["delivery_markup"] + total_rider_surcharges - wallet_discount - welcome_discount,
+        total_amount = final_total,
         delivery_fee = delivery["fee"],
         
         # ── Surcharges ──
@@ -717,7 +743,12 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
         is_welcome_offer = is_welcome,
         delivery_type=delivery_type,
         bottle_source="platform" if is_welcome else "own",
-        payment_method=payment_method
+        payment_method=payment_method,
+
+        # ── H-07 FIX: Discount Audit Trail ──
+        wallet_discount = wallet_discount,
+        welcome_discount = welcome_discount,
+        product_subtotal = float(product_total),
       )
       session.add(order)
       await session.flush()
@@ -755,23 +786,24 @@ async def create_order(session: AsyncSession, CheckoutRequestID: str | None, id:
 
         # Low stock push threshold evaluator
         if new_stock <= 5:
-            vendor = await session.get(Vendor, vendor_id_for_push)
-            if vendor:
+            # H-08 FIX: Renamed vendor to stock_alert_vendor to prevent shadowing
+            stock_alert_vendor = await session.get(Vendor, vendor_id_for_push)
+            if stock_alert_vendor:
                 title = "Low Stock Alert! ⚠️"
                 body = f"'{product_name}' is running critically low ({new_stock} left). Restock soon!"
                 action_url = "/(screens)/Inventory"
                 await create_notification(
                     session=session,
-                    user_id=vendor.id,
+                    user_id=stock_alert_vendor.id,
                     user_type="vendor",
                     title=title,
                     message=body,
                     message_type="low_stock",
                     action_url=action_url
                 )
-                if vendor.push_token:
+                if stock_alert_vendor.push_token:
                     asyncio.create_task(send_push_message(
-                        to=vendor.push_token,
+                        to=stock_alert_vendor.push_token,
                         title=title,
                         body=body,
                         data={"url": action_url}
@@ -875,7 +907,7 @@ async def update_orders_payment_status_by_checkout_id(
       }
 
 async def fetch_orders_by_id(session: AsyncSession, user_id: UUID, skip: int = 0, limit: int = 50) -> list[BaseOrder]:
-  query = select(Order).where(Order.customer_id == user_id).options(joinedload(Order.order_item).joinedload(OrderItem.product)).order_by(Order.created_at.desc()).offset(skip).limit(limit)
+  query = select(Order).where(Order.customer_id == user_id).options(joinedload(Order.order_item).joinedload(OrderItem.product), joinedload(Order.vendor), joinedload(Order.deliverer)).order_by(Order.created_at.desc()).offset(skip).limit(limit)
   result = await session.execute(query)
   orders = result.unique().scalars().all()
   return orders
@@ -884,7 +916,7 @@ async def get_last_completed_order(session: AsyncSession, user_id: UUID) -> Base
     query = (
         select(Order)
         .where(Order.customer_id == user_id, Order.order_status == "delivered")
-        .options(joinedload(Order.order_item).joinedload(OrderItem.product))
+        .options(joinedload(Order.order_item).joinedload(OrderItem.product), joinedload(Order.vendor), joinedload(Order.deliverer))
         .order_by(Order.created_at.desc())
         .limit(1)
     )
@@ -898,9 +930,9 @@ async def get_active_order(session: AsyncSession, user_id: UUID) -> BaseOrder | 
         select(Order)
         .where(
             Order.customer_id == user_id,
-            Order.order_status.in_(["pending", "accepted", "preparing", "ready", "picked_up", "in_transit", "mismatch_pending"])
+            Order.order_status.in_(["pending", "unassigned", "accepted", "preparing", "ready", "picked_up", "mismatch_pending", "pending_review"])
         )
-        .options(joinedload(Order.order_item).joinedload(OrderItem.product))
+        .options(joinedload(Order.order_item).joinedload(OrderItem.product), joinedload(Order.vendor), joinedload(Order.deliverer))
         .order_by(Order.created_at.desc())
         .limit(1)
     )
@@ -933,6 +965,22 @@ async def cancel_customer_order(session: AsyncSession, user_id: UUID, order_id: 
             detail=f"Cannot cancel order with status '{order.order_status}'. Only pending, accepted, or unassigned orders can be cancelled."
         )
 
+    # H-05 FIX: Add cancellation penalty for accepted orders
+    # If the order is "accepted", the vendor is likely preparing it.
+    # We enforce a KSH 50 cancellation fee added to their debt balance.
+    if order.order_status == "accepted":
+        user = await session.get(User, user_id)
+        if user:
+            penalty = 50.0
+            user.debt_balance = float(user.debt_balance or 0) + penalty
+            logger.info(f"Cancellation penalty of KSH {penalty} applied to user {user_id}")
+
+    # M-08 FIX: Release rider availability if assigned
+    if order.deliverer_id:
+        deliverer = await session.get(Deliverer, order.deliverer_id)
+        if deliverer:
+            deliverer.is_available = True
+
     order.order_status = "cancelled"
 
     # BUG-05 FIX: Restore stock on cancellation
@@ -949,6 +997,17 @@ async def cancel_customer_order(session: AsyncSession, user_id: UUID, order_id: 
                 is_available=True
             )
         )
+
+    # Restore Wallet Balance and Welcome Offer
+    user = await session.get(User, user_id)
+    if user:
+        if order.wallet_discount and float(order.wallet_discount) > 0:
+            user.wallet_balance = float(user.wallet_balance or 0) + float(order.wallet_discount)
+            logger.info(f"Restored KSH {order.wallet_discount} to wallet for user {user_id}")
+            
+        if order.is_welcome_offer or (order.welcome_discount and float(order.welcome_discount) > 0):
+            user.has_used_welcome_offer = False
+            logger.info(f"Reset welcome offer status for user {user_id} due to cancellation")
 
     # Flag paid orders for refund
     if order.payment_status == "paid":
@@ -1063,9 +1122,9 @@ async def reassign_unassigned_orders(session: AsyncSession):
         if not deliverer:
             continue
             
-        order.deliverer_id = deliverer.id
-        order.order_status = "pending"
-        deliverer.is_available = False
+        # H-02 FIX: Do not force auto-assign. Just broadcast the offer to the closest rider via Trip Radar.
+        # Wait for them to actively accept it instead of forcing them offline.
+        # Order stays 'unassigned'.
         reassigned_count += 1
 
         # BUG-08 FIX: Push-notify the newly assigned rider with order details
@@ -1103,9 +1162,9 @@ async def reassign_unassigned_orders(session: AsyncSession):
                 customer_id=str(order.customer_id),
                 deliverer_id=str(deliverer.id),
                 payload={
-                    "action": "ORDER_ASSIGNED",
+                    "action": "ORDER_OFFER_BROADCAST",
                     "order_id": str(order.id),
-                    "status": "pending",
+                    "status": "unassigned",
                     "deliverer_id": str(deliverer.id),
                 }
             )
@@ -1115,3 +1174,80 @@ async def reassign_unassigned_orders(session: AsyncSession):
     await session.commit()
     logger.info(f"Reassigned {reassigned_count} unassigned orders")
     return {"reassigned": reassigned_count}
+
+# ── C-03 FIX: Mismatch Resolution Logic ────────────────────────────────────
+
+async def resolve_address_mismatch(session: AsyncSession, user_id: UUID, order_id: UUID, action: str):
+    """
+    Handles customer response to a rider flagging an address mismatch.
+    action: "approve_charge" | "leave_ground"
+    """
+    order = await session.get(Order, order_id)
+    if not order or order.customer_id != user_id:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.order_status != "mismatch_pending":
+        raise HTTPException(status_code=400, detail="Order is not in mismatch state")
+
+    if action == "approve_charge":
+        # Customer accepts the KSh 30 staircase charge
+        charge = 30.0
+        order.staircase_surcharge = float(order.staircase_surcharge or 0) + charge
+        order.total_amount = float(order.total_amount or 0) + charge
+        
+        # Add to customer's debt balance since M-PESA already processed the original total
+        user = await session.get(User, user_id)
+        if user:
+            user.debt_balance = float(user.debt_balance or 0) + charge
+        
+        # Determine rider payout vs platform based on employment type
+        # For gig economy riders, they keep 100% of the surcharge
+        # For in-house, it goes to the vendor/platform
+        deliverer = await session.get(Deliverer, order.deliverer_id) if order.deliverer_id else None
+        if deliverer and deliverer.employment_model == "gig_economy":
+            order.rider_net = float(order.rider_net or 0) + charge
+        else:
+            order.vendor_net = float(order.vendor_net or 0) + charge
+
+    elif action == "leave_ground":
+        # No extra charge, rider leaves at ground floor
+        pass
+    else:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    # Transition back to picked_up so rider can complete delivery
+    order.order_status = "picked_up"
+    await session.commit()
+
+    # Notify Rider
+    if order.deliverer_id:
+        title = "Mismatch Resolved ✅"
+        body = "Customer approved the staircase charge. Proceed up." if action == "approve_charge" else "Customer requested drop-off at ground floor."
+        await create_notification(
+            session=session,
+            user_id=order.deliverer_id,
+            user_type="rider",
+            title=title,
+            message=body,
+            message_type="mismatch_resolved",
+            action_url="/(screens)/ActiveDelivery"
+        )
+        
+        # Broadcast to rider app
+        try:
+            from routes.websocket_routes import manager
+            await manager.broadcast_order_update(
+                vendor_id=str(order.vendor_id),
+                customer_id=str(order.customer_id),
+                deliverer_id=str(order.deliverer_id),
+                payload={
+                    "action": "MISMATCH_RESOLVED",
+                    "order_id": str(order.id),
+                    "status": "picked_up",
+                    "resolution": action
+                }
+            )
+        except Exception as e:
+            logger.error(f"WS Broadcast fail in resolve_mismatch: {e}")
+
+    return {"message": "Mismatch resolved successfully", "order": {"id": str(order.id), "status": order.order_status, "total_amount": order.total_amount}}

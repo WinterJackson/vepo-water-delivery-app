@@ -23,6 +23,7 @@ import * as Haptics from "expo-haptics";
 import { trackEvent } from "@/utils/analytics";
 import { Popup } from "@/lib/popup";
 import SearchBar from "@/components/common/Search";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useVendorProducts } from "@/hooks/queries/useVendorProducts";
 import { useDebounce } from "@/hooks/useDebounce";
 
@@ -280,14 +281,12 @@ export default function Products() {
                  <SkeletonRow />
               </View>
             ) : (
-              <View className="items-center justify-center pt-24">
-                <View className={`w-20 h-20 rounded-full items-center justify-center mb-4 ${darkTheme ? "bg-slate-800" : "bg-white"}`}>
-                  <Ionicons name="cube-outline" size={40} color={BRAND.primary} />
-                </View>
-                <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>No products found</Text>
-                <Text className={`text-base mt-2 text-center px-10 ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                  {searchQuery ? "Try adjusting your search filters" : "Add your first product to start selling"}
-                </Text>
+              <View className="mt-16">
+                <EmptyState 
+                  mood="sad" 
+                  title="No products found" 
+                  subtitle={searchQuery ? "Try adjusting your search filters" : "Add your first product to start selling"} 
+                />
               </View>
             )
           }

@@ -1,8 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { OrderDetailSkeleton } from "@/components/skeletons/ContextualSkeletons";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { BRAND, TOAST } from "@/constants/brandColors";
-import { useOrders, useCancelOrder, Order, useOrderTrackingLogs } from "@/hooks/queries/useOrders";
+import { useOrders, useActiveOrder, useCancelOrder, useResolveMismatch, Order, useOrderTrackingLogs } from "@/hooks/queries/useOrders";
 import { useOrderContacts, ContactInfo } from "@/hooks/queries/useOrderContacts";
 import { Toast } from "@/lib/toast";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -47,18 +48,29 @@ if (Platform.OS !== 'web') {
 
 const { width } = Dimensions.get("window");
 
-const STATUS_STEPS = ["unassigned", "pending", "accepted", "picked_up", "in_transit", "delivered"];
+const STATUS_STEPS = ["pending", "accepted", "preparing", "ready", "picked_up", "delivered"];
 
 const STATUS_LABELS: Record<string, string> = {
-    unassigned: "Finding Vendor",
+    unassigned: "Order Placed", // Maps loosely to pending in terms of visual feedback
     pending: "Order Placed",
-    accepted: "Accepted by Vendor",
-    picked_up: "Picked Up",
-    in_transit: "On the Way",
+    accepted: "Vendor Accepted",
+    preparing: "Preparing",
+    ready: "Ready for Pickup",
+    picked_up: "On the Way",
     delivered: "Delivered",
     cancelled: "Cancelled",
     rejected: "Rejected",
     mismatch_pending: "Delivery Paused",
+    pending_review: "Review Pending",
+};
+
+const SHORT_STATUS_LABELS: Record<string, string> = {
+    pending: "Placed",
+    accepted: "Accepted",
+    preparing: "Preparing",
+    ready: "Ready",
+    picked_up: "Transit",
+    delivered: "Delivered",
 };
 
 export default function OrderDetail() {
@@ -69,12 +81,17 @@ export default function OrderDetail() {
 
     const [loading, setLoading] = useState(false);
     const { mutate: cancelOrderMutation, isPending: cancelLoading } = useCancelOrder();
-
+    const { mutate: resolveMismatch, isPending: resolveLoading } = useResolveMismatch();
     const handleCancelOrder = () => {
         if (!order) return;
+        const isAccepted = order.order_status === "accepted";
+        const message = isAccepted 
+            ? "Are you sure you want to cancel this order? Since the vendor has already accepted it, a KSH 50 cancellation penalty will apply to your account."
+            : "Are you sure you want to cancel this order? This action cannot be undone.";
+            
         Alert.alert(
             "Cancel Order",
-            "Are you sure you want to cancel this order? This action cannot be undone.",
+            message,
             [
                 { text: "No, Keep It", style: "cancel" },
                 {
@@ -95,16 +112,31 @@ export default function OrderDetail() {
         );
     };
 
-    const { data: orders = [], isLoading: ordersLoading } = useOrders();
-    const order: Order | null = useMemo(() => orders.find((o: Order) => o.id === orderId) || null, [orders, orderId]);
+    const { data: orders = [], isLoading: ordersLoading, isFetching: ordersFetching } = useOrders();
+    const { data: activeOrder } = useActiveOrder();
+
+    const order: Order | null = useMemo(() => {
+        let found = orders.find((o: Order) => o.id === orderId) || null;
+        // Fallback to activeOrder if it perfectly matches the param but isn't in the cached orders array yet
+        if (!found && activeOrder?.id === orderId) {
+            found = activeOrder;
+        }
+        return found;
+    }, [orders, orderId, activeOrder]);
 
     // Use query loading state natively, or local state during intermediate transitions
-    const isLoading = loading || ordersLoading;
+    // If order is not found but we're fetching in the background, consider it loading to prevent UI flashes
+    const isLoading = loading || ordersLoading || (!order && ordersFetching);
 
-    const getStatusIndex = (status: string) => STATUS_STEPS.indexOf(status);
+    const getStatusIndex = (status: string) => {
+        // Handle background/legacy/cached states gracefully
+        if (status === "unassigned") return 0; // Treat as pending for visual simplicity
+        if (status === "completed") return 5; // Map legacy cached completed state to delivered
+        return STATUS_STEPS.indexOf(status);
+    };
     const currentStepIndex = order ? getStatusIndex(order.order_status) : -1;
 
-    const shouldTrackRider = order?.order_status === "picked_up" || order?.order_status === "in_transit" || order?.order_status === "mismatch_pending";
+    const shouldTrackRider = ["picked_up", "mismatch_pending", "pending_review"].includes(order?.order_status as string);
     const { data: riderLocation } = useRiderTracking(order?.id || null, shouldTrackRider);
     const { data: trackingLogs } = useOrderTrackingLogs(order?.id || null);
 
@@ -122,8 +154,23 @@ export default function OrderDetail() {
         Linking.openURL(`tel:${phone}`);
     };
 
+
     const mapRef = useRef<any>(null);
     const markerRef = useRef<any>(null);
+
+    const { height } = Dimensions.get('window');
+    const StatusBarHeight = StatusBar.currentHeight || 0;
+    const finalHeight = height + StatusBarHeight;
+
+    const handleZoom = (zoomIn: boolean) => {
+        if (mapRef.current) {
+            mapRef.current.getCamera().then((camera: any) => {
+                camera.zoom += zoomIn ? 1 : -1;
+                mapRef.current.animateCamera(camera, { duration: 500 });
+            });
+        }
+    };
+
 
     // Smoothly animate the map camera to follow the rider as WebSockets stream GPS coords natively
     useEffect(() => {
@@ -146,26 +193,52 @@ export default function OrderDetail() {
                     1500
                 );
             }
+        } else if (!shouldTrackRider && order && mapRef.current && Platform.OS !== 'web') {
+            // Pre-dispatch: Fit map to show both vendor and dropoff locations
+            const coords: { latitude: number; longitude: number }[] = [];
+            const vLat = order.vendor?.lat || order.lat_from;
+            const vLng = order.vendor?.lng || order.lng_from;
+            
+            if (vLat && vLng) coords.push({ latitude: vLat, longitude: vLng });
+            if (order.lat && order.lng) coords.push({ latitude: order.lat, longitude: order.lng });
+
+            if (coords.length > 0) {
+                // Wait slightly for map to render before fitting
+                setTimeout(() => {
+                    mapRef.current?.fitToCoordinates(coords, {
+                        edgePadding: { top: 80, right: 60, bottom: 80, left: 60 },
+                        animated: true,
+                    });
+                }, 1000);
+            }
         }
-    }, [riderLocation?.lat, riderLocation?.lng]);
+    }, [riderLocation?.lat, riderLocation?.lng, shouldTrackRider, order?.id]);
 
     if (isLoading) {
         return (
-            <View className={`flex-1 ${darkTheme ? "bg-black" : ""}`} style={{ paddingTop: StatusBar.currentHeight }}>
-                <View style={{ overflow: "hidden", paddingBottom: 4 }}>
-                    <View 
-                        className="flex-row items-center px-4 py-3 pb-4 mb-2 gap-3"
-                        style={{ 
-                            backgroundColor: darkTheme ? "#000" : "#fff",
-                            borderBottomWidth: 1, 
-                            borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
-                        }}
-                    >
-                        <BackButtonMinimal />
+        <View className={`flex-1 ${darkTheme ? "bg-black" : "bg-gray-100"}`}>
+            <StatusBar translucent backgroundColor="transparent" barStyle={darkTheme ? "light-content" : "dark-content"} />
+
+            {/* Map Skeleton Block (Top 55%) */}
+            <View className="absolute top-0 left-0 right-0" style={{ height: '55%' }}>
+                <View className={`flex-1 ${darkTheme ? "bg-gray-900" : "bg-gray-300"}`} />
+                <View className="absolute top-0 left-0 right-0 z-10 px-4" style={{ paddingTop: (StatusBar.currentHeight || 40) + 10 }}>
+                    <View className="flex-row items-center gap-3">
+                        <View className={`w-10 h-10 rounded-full items-center justify-center`} style={{ backgroundColor: BRAND.primary }}>
+                            <Ionicons name="chevron-back" size={24} color="white" />
+                        </View>
                     </View>
+                </View>
+            </View>
+
+            {/* Details Skeleton Block (Bottom 50%) */}
+            <View className="absolute bottom-0 left-0 right-0" style={{ height: '50%', backgroundColor: darkTheme ? '#000' : '#f9fafb', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }}>
+                <View className="w-full items-center pt-3 pb-2">
+                    <View className={`w-12 h-1.5 rounded-full ${darkTheme ? "bg-gray-800" : "bg-gray-300"}`} />
                 </View>
                 <OrderDetailSkeleton />
             </View>
+        </View>
         );
     }
 
@@ -178,57 +251,210 @@ export default function OrderDetail() {
     }
 
     return (
-        <View className={`flex-1 ${darkTheme ? "bg-black" : ""}`} style={{ paddingTop: StatusBar.currentHeight }}>
+        <View className={`flex-1 ${darkTheme ? "bg-black" : "bg-gray-100"}`}>
             <StatusBar translucent backgroundColor="transparent" barStyle={darkTheme ? "light-content" : "dark-content"} />
 
-            {/* Header */}
-            <View style={{ overflow: "hidden", paddingBottom: 4 }}>
-            <View 
-                className="flex-row items-center px-4 py-3 pb-4 mb-2 gap-3"
-                style={{ 
-                    backgroundColor: darkTheme ? "#000" : "#fff",
-    borderBottomWidth: 1, 
-                    borderBottomColor: darkTheme ? BRAND.gray800 : BRAND.gray200,
-                    ...(darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 })
-                }}
-            >
-                <PressableScale onPress={() => router.back()} activeOpacity={0.7}>
-                    <BackButtonMinimal />
-                </PressableScale>
-                <Text className={`font-bold text-xl ${darkTheme ? "text-white" : "text-black"}`}>
-                    Order #{order.id?.slice(-6)}
-                </Text>
-            </View>
+            {/* Top Half: Map Area */}
+            <View className="absolute top-0 left-0 right-0" style={{ height: '55%' }}>
+                {MapView && (
+                    <MapView
+                        ref={mapRef}
+                        provider={PROVIDER_GOOGLE}
+                        mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
+                        style={{ flex: 1 }}
+                        initialRegion={
+                            shouldTrackRider && riderLocation
+                                ? {
+                                      latitude: riderLocation.lat,
+                                      longitude: riderLocation.lng,
+                                      latitudeDelta: 0.015,
+                                      longitudeDelta: 0.015,
+                                  }
+                                : trackingLogs?.[0]
+                                ? {
+                                      latitude: trackingLogs[0].lat,
+                                      longitude: trackingLogs[0].lng,
+                                      latitudeDelta: 0.015,
+                                      longitudeDelta: 0.015,
+                                  }
+                                : {
+                                      // Fallback to Nairobi/General Location
+                                      latitude: -1.2921,
+                                      longitude: 36.8219,
+                                      latitudeDelta: 0.05,
+                                      longitudeDelta: 0.05,
+                                  }
+                        }
+                    >
+                        {shouldTrackRider && riderLocation && (MarkerAnimated && Platform.OS !== 'web' ? (
+                            <MarkerAnimated
+                                ref={markerRef}
+                                coordinate={{ latitude: riderLocation.lat, longitude: riderLocation.lng }}
+                                title={riderLocation.rider_name || "Rider"}
+                                description="On the way with your order"
+                            >
+                                <View className="w-10 h-10 rounded-full bg-white items-center justify-center border-2 border-blue-500" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 }}>
+                                    <Ionicons name="bicycle" size={24} color={BRAND.primary} />
+                                </View>
+                            </MarkerAnimated>
+                        ) : (
+                            <Marker
+                                coordinate={{ latitude: riderLocation.lat, longitude: riderLocation.lng }}
+                                title={riderLocation.rider_name || "Rider"}
+                            >
+                                <View className="w-10 h-10 rounded-full bg-white items-center justify-center border-2 border-blue-500" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 }}>
+                                    <Ionicons name="bicycle" size={24} color={BRAND.primary} />
+                                </View>
+                            </Marker>
+                        ))}
+                        
+                        {/* Vendor Marker (Always show) */}
+                        {(order?.vendor?.lat || order?.lat_from) && (order?.vendor?.lng || order?.lng_from) && (
+                            <Marker
+                                coordinate={{
+                                    latitude: (order.vendor?.lat || order.lat_from) as number,
+                                    longitude: (order.vendor?.lng || order.lng_from) as number,
+                                }}
+                                title={order.vendor?.business_name || "Vendor"}
+                                description="Pickup Location"
+                            >
+                                <View className="w-10 h-10 rounded-full bg-white items-center justify-center border-2 border-green-500" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 }}>
+                                    <Ionicons name="storefront" size={20} color={BRAND.primary} />
+                                </View>
+                            </Marker>
+                        )}
+
+                        {/* Customer Dropoff Marker (Always show) */}
+                        {order?.lat && order?.lng && (
+                            <Marker
+                                coordinate={{
+                                    latitude: order.lat as number,
+                                    longitude: order.lng as number,
+                                }}
+                                title="Delivery Destination"
+                                description="Where your water is going"
+                            >
+                                <View className="w-10 h-10 rounded-full bg-white items-center justify-center border-2 border-black" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 }}>
+                                    <Ionicons name="home" size={20} color="black" />
+                                </View>
+                            </Marker>
+                        )}
+                        
+                        {trackingLogs && trackingLogs.length > 0 && Polyline && (
+                            <>
+                                <Polyline
+                                    coordinates={trackingLogs.map((log: any) => ({
+                                        latitude: log.lat,
+                                        longitude: log.lng,
+                                    }))}
+                                    strokeColor={BRAND.primary}
+                                    strokeWidth={4}
+                                />
+                                <Marker
+                                    coordinate={{ latitude: trackingLogs[0].lat, longitude: trackingLogs[0].lng }}
+                                    title="Start"
+                                    pinColor="green"
+                                />
+                                {order.order_status === "delivered" && (
+                                    <Marker
+                                        coordinate={{ latitude: trackingLogs[trackingLogs.length - 1].lat, longitude: trackingLogs[trackingLogs.length - 1].lng }}
+                                        title="Delivery Location"
+                                        pinColor="blue"
+                                    />
+                                )}
+                            </>
+                        )}
+                    </MapView>
+                )}
+
+                {/* Overlaid Header */}
+                <View className="absolute top-0 left-0 right-0 z-10 px-4 pointer-events-box-none" style={{ paddingTop: (StatusBar.currentHeight || 40) + 10 }}>
+                    <View className="flex-row items-center gap-3">
+                        <PressableScale onPress={() => router.back()} activeOpacity={0.7}>
+                            <View 
+                                className={`w-10 h-10 rounded-full items-center justify-center`}
+                                style={{ backgroundColor: BRAND.primary, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.25, shadowRadius: 3.84, elevation: 5 }}
+                            >
+                                <Ionicons name="chevron-back" size={24} color="white" />
+                            </View>
+                        </PressableScale>
+                        <View 
+                            className={`px-4 py-2 rounded-full border ${darkTheme ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-gray-200"}`}
+                            style={darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}
+                        >
+                            <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-black"}`}>
+                                Order #{order.id?.slice(-6)}
+                            </Text>
+                        </View>
+                    </View>
+                </View>
+
+                {/* Overlaid Rider Info (if active) */}
+                {shouldTrackRider && riderLocation && (
+                    <View className="absolute top-36 left-4 z-10">
+                        <View className={`px-4 py-2 rounded-full flex-row items-center gap-2 border ${darkTheme ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-gray-200"}`} style={darkTheme ? { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 } : { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 }}>
+                            <View className="w-2 h-2 rounded-full bg-green-500" />
+                            <Text className={`font-bold text-sm ${darkTheme ? "text-white" : "text-black"}`}>Live Tracking</Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Zoom Controls Overlay */}
+                <View className="absolute top-36 right-4 z-10 flex-col gap-3">
+                    <PressableScale
+                        onPress={() => handleZoom(true)}
+                        className={`w-10 h-10 rounded-full items-center justify-center border ${darkTheme ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-gray-200"}`}
+                        style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3.84, elevation: 5 }}
+                    >
+                        <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-black"}`}>+</Text>
+                    </PressableScale>
+                    <PressableScale
+                        onPress={() => handleZoom(false)}
+                        className={`w-10 h-10 rounded-full items-center justify-center border ${darkTheme ? "bg-[#1c1c1e] border-[#2c2c2e]" : "bg-white border-gray-200"}`}
+                        style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 3.84, elevation: 5 }}
+                    >
+                        <Text className={`text-xl font-bold ${darkTheme ? "text-white" : "text-black"}`}>−</Text>
+                    </PressableScale>
+                </View>
             </View>
 
-            <ScrollView
-                className="flex-1"
-                contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
-                showsVerticalScrollIndicator={false}
-            >
+            {/* Bottom Half: Scrollable Details */}
+            <View className="absolute bottom-0 left-0 right-0" style={{ height: '50%', backgroundColor: darkTheme ? '#000' : '#f9fafb', borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden', elevation: 15, shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 12 }}>
+                <View className="w-full items-center pt-3 pb-2 bg-transparent">
+                    <View className={`w-12 h-1.5 rounded-full ${darkTheme ? "bg-[#333]" : "bg-[#cbd5e1]"}`} />
+                </View>
+                <ScrollView
+                    contentContainerStyle={{ padding: 16, paddingTop: 0, paddingBottom: 60 }}
+                    showsVerticalScrollIndicator={false}
+                >
                  {/* Status Timeline Tracking Bar */}
                  <View className={`p-5 rounded-2xl mb-5 ${darkTheme ? "bg-white/5" : "bg-white"}`}>
                      <Text className={`text-lg font-bold mb-4 ${darkTheme ? "text-white" : "text-black"}`}>
                          Tracking Status
                      </Text>
-                     {(order.order_status === "cancelled" || order.order_status === "rejected" || order.order_status === "mismatch_pending") ? (
-                         <View className="flex-row items-center gap-3">
+                     {["cancelled", "rejected", "mismatch_pending", "pending_review"].includes(order.order_status) ? (
+                         <View className="flex-row items-center gap-3 pr-4">
                              <View 
-                                className="w-8 h-8 rounded-full items-center justify-center"
-                                style={{ backgroundColor: order.order_status === "mismatch_pending" ? BRAND.primary : TOAST.error }}
+                                className="w-8 h-8 rounded-full items-center justify-center shrink-0"
+                                style={{ backgroundColor: ["mismatch_pending", "pending_review"].includes(order.order_status) ? BRAND.primary : TOAST.error }}
                              >
-                                 <Text className="text-white font-bold">{order.order_status === "mismatch_pending" ? "⚠️" : "✕"}</Text>
+                                 <Text className="text-white font-bold">{["mismatch_pending", "pending_review"].includes(order.order_status) ? "⚠️" : "✕"}</Text>
                              </View>
-                             <View>
+                             <View className="flex-1">
                                 <Text 
                                     className="text-base font-semibold"
-                                    style={{ color: order.order_status === "mismatch_pending" ? BRAND.primary : TOAST.error }}
+                                    style={{ color: ["mismatch_pending", "pending_review"].includes(order.order_status) ? BRAND.primary : TOAST.error }}
                                 >
-                                    {STATUS_LABELS[order.order_status]}
+                                    {STATUS_LABELS[order.order_status] || "Notice"}
                                 </Text>
                                 {order.order_status === "mismatch_pending" && (
-                                    <Text className={`text-xs mt-1 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                    <Text className={`text-xs mt-1 leading-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
                                         The rider reported an address mismatch. Please come to the ground floor to pick up your bottles!
+                                    </Text>
+                                )}
+                                {order.order_status === "pending_review" && (
+                                    <Text className={`text-xs mt-1 leading-4 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                                        The rider has flagged your empty bottle for review. Please wait while admin reviews the photos.
                                     </Text>
                                 )}
                              </View>
@@ -274,7 +500,7 @@ export default function OrderDetail() {
                                                          : darkTheme ? "text-gray-600" : "text-gray-400"
                                                  }`}
                                              >
-                                                 {STATUS_LABELS[step]?.split(" ")?.[0]}
+                                                 {SHORT_STATUS_LABELS[step] || step}
                                              </Text>
                                          </View>
                                      );
@@ -292,94 +518,7 @@ export default function OrderDetail() {
                      )}
                  </View>
 
-                 {/* Rider Live Tracking / Historical Map */}
-                 {((shouldTrackRider && riderLocation?.lat && riderLocation?.lng) || (order.order_status === "delivered" && trackingLogs && trackingLogs.length > 0)) && MapView && (
-                     <View className={`rounded-2xl overflow-hidden mb-5 border ${darkTheme ? "border-gray-800 bg-white/5" : "border-gray-200 bg-white"}`}>
-                         <View className="p-4 border-b border-gray-200 dark:border-gray-800 flex-row justify-between items-center">
-                             <Text className={`font-bold text-lg ${darkTheme ? "text-white" : "text-black"}`}>
-                                 {order.order_status === "delivered" ? "Route History" : "Rider Location"}
-                             </Text>
-                             {shouldTrackRider && (
-                                <View className="flex-row items-center gap-2">
-                                    <View className="w-2 h-2 rounded-full bg-green-500" />
-                                    <Text className="text-green-500 font-semibold text-sm">Live</Text>
-                                </View>
-                             )}
-                         </View>
-                         <View className="h-48 w-full bg-gray-200">
-                            <MapView
-                                 ref={mapRef}
-                                 provider={PROVIDER_GOOGLE}
-                                 mapId={Platform.OS === 'ios' ? '3b06fa233809c6d3b07afa7e' : '3b06fa233809c6d35d39c7c1'}
-                                 style={{ flex: 1 }}
-                                 initialRegion={{
-                                     latitude: shouldTrackRider && riderLocation ? riderLocation.lat : trackingLogs?.[0]?.lat,
-                                     longitude: shouldTrackRider && riderLocation ? riderLocation.lng : trackingLogs?.[0]?.lng,
-                                     latitudeDelta: 0.015,
-                                     longitudeDelta: 0.015,
-                                 }}
-                                 zoomEnabled={false}
-                                 scrollEnabled={false}
-                                 pitchEnabled={false}
-                                 rotateEnabled={false}
-                             >
-                                 {shouldTrackRider && riderLocation && (MarkerAnimated && Platform.OS !== 'web' ? (
-                                     <MarkerAnimated
-                                         ref={markerRef}
-                                         coordinate={{ latitude: riderLocation.lat, longitude: riderLocation.lng }}
-                                         title={riderLocation.rider_name || "Rider"}
-                                         description="On the way with your order"
-                                         pinColor="blue"
-                                     />
-                                 ) : (
-                                     <Marker
-                                         coordinate={{ latitude: riderLocation.lat, longitude: riderLocation.lng }}
-                                         title={riderLocation.rider_name || "Rider"}
-                                         pinColor="blue"
-                                     />
-                                 ))}
-                                 
-                                 {order.order_status === "delivered" && trackingLogs && trackingLogs.length > 0 && Polyline && (
-                                     <>
-                                         <Polyline
-                                             coordinates={trackingLogs.map((log: any) => ({
-                                                 latitude: log.lat,
-                                                 longitude: log.lng,
-                                             }))}
-                                             strokeColor={BRAND.primary}
-                                             strokeWidth={4}
-                                         />
-                                         <Marker
-                                             coordinate={{ latitude: trackingLogs[0].lat, longitude: trackingLogs[0].lng }}
-                                             title="Start"
-                                             pinColor="green"
-                                         />
-                                         <Marker
-                                             coordinate={{ latitude: trackingLogs[trackingLogs.length - 1].lat, longitude: trackingLogs[trackingLogs.length - 1].lng }}
-                                             title="Delivery Location"
-                                             pinColor="blue"
-                                         />
-                                     </>
-                                 )}
-                             </MapView>
-                         </View>
-                         {shouldTrackRider && riderLocation && (
-                             <View className="p-4 flex-row items-center gap-3">
-                                 <View className="w-10 h-10 rounded-full bg-blue-500/20 items-center justify-center">
-                                     <Text style={{ fontSize: 20 }}>🛵</Text>
-                                 </View>
-                                 <View>
-                                     <Text className={`font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
-                                         {riderLocation.rider_name || "Your Rider"}
-                                     </Text>
-                                     <Text className={`text-sm ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-                                         Will arrive soon
-                                     </Text>
-                                 </View>
-                             </View>
-                         )}
-                     </View>
-                 )}
+
 
                 {/* ── Cross-Party Contact Cards ────────────────────────── */}
                 {contacts.length > 0 && (
@@ -504,19 +643,90 @@ export default function OrderDetail() {
                     <Text className={`text-lg font-bold mb-3 ${darkTheme ? "text-white" : "text-black"}`}>
                         Price Summary
                     </Text>
+                    
+                    {/* C-01 FIX: Use server-provided product_subtotal, fallback to computing it from items for legacy orders */}
                     <View className="flex-row justify-between mb-2">
                         <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Subtotal</Text>
                         <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
-                            KSH {(Number(order.total_amount || 0) - Number(order.delivery_fee || 0)).toFixed(2)}
+                            KSH {Number((Number(order.product_subtotal) > 0 ? order.product_subtotal : order.order_item?.reduce((sum: number, item: any) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0)) || 0).toFixed(2)}
                         </Text>
                     </View>
+
                     <View className="flex-row justify-between mb-2">
                         <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Delivery Fee</Text>
-                        <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>KSH {(Number(order.delivery_fee || 0)).toFixed(2)}</Text>
+                        <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
+                            KSH {Number(order.delivery_fee || 0).toFixed(2)}
+                        </Text>
                     </View>
+
+                    {order.service_fee ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Service Fee</Text>
+                            <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
+                                KSH {Number(order.service_fee).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {order.surge_fee ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Surge Pricing</Text>
+                            <Text className={`font-semibold text-orange-500`}>
+                                KSH {Number(order.surge_fee).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {order.payload_surcharge ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Large Order Surcharge</Text>
+                            <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
+                                KSH {Number(order.payload_surcharge).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {order.staircase_surcharge ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Staircase Surcharge</Text>
+                            <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
+                                KSH {Number(order.staircase_surcharge).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {order.welcome_discount ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Welcome Offer</Text>
+                            <Text className={`font-semibold text-green-500`}>
+                                -KSH {Number(order.welcome_discount).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
+                    {order.wallet_discount ? (
+                        <View className="flex-row justify-between mb-2">
+                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Wallet Balance Applied</Text>
+                            <Text className={`font-semibold text-green-500`}>
+                                -KSH {Number(order.wallet_discount).toFixed(2)}
+                            </Text>
+                        </View>
+                    ) : null}
+
                     <View className={`border-t pt-2 mt-2 flex-row justify-between ${darkTheme ? "border-gray-700" : "border-gray-200"}`}>
                         <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-black"}`}>Total</Text>
-                        <Text className={`text-lg font-bold text-green-500`}>KSH {Number(order.total_amount || 0).toFixed(2)}</Text>
+                        <Text className={`text-lg font-bold text-green-500`}>
+                            KSH {(
+                                Number((Number(order.product_subtotal) > 0 ? order.product_subtotal : order.order_item?.reduce((sum: number, item: any) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0)) || 0) +
+                                Number(order.delivery_fee || 0) +
+                                Number(order.service_fee || 0) +
+                                Number(order.surge_fee || 0) +
+                                Number(order.payload_surcharge || 0) +
+                                Number(order.staircase_surcharge || 0) -
+                                Number(order.welcome_discount || 0) -
+                                Number(order.wallet_discount || 0)
+                            ).toFixed(2)}
+                        </Text>
                     </View>
                 </View>
 
@@ -525,7 +735,7 @@ export default function OrderDetail() {
                     <Text className={`text-lg font-bold mb-3 ${darkTheme ? "text-white" : "text-black"}`}>
                         Order Info
                     </Text>
-                    <View className="gap-2">
+                    <View className="gap-3">
                         <View className="flex-row justify-between">
                             <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Order ID</Text>
                             <Text className={`font-mono text-sm ${darkTheme ? "text-white" : "text-black"}`}>
@@ -534,7 +744,7 @@ export default function OrderDetail() {
                         </View>
                         <View className="flex-row justify-between">
                             <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Placed On</Text>
-                            <Text className={`${darkTheme ? "text-white" : "text-black"}`}>
+                            <Text className={`font-semibold ${darkTheme ? "text-white" : "text-black"}`}>
                                 {order.created_at ? new Date(order.created_at).toLocaleDateString("en-US", {
                                     day: "numeric",
                                     month: "short",
@@ -544,19 +754,58 @@ export default function OrderDetail() {
                                 }) : "Unknown Date"}
                             </Text>
                         </View>
-                        <View className="flex-row justify-between mt-1 pt-2 border-t border-gray-200 dark:border-gray-800">
-                            <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Payment Method</Text>
-                            {order.payment_method === "cash" ? (
-                                <View className="flex-row items-center gap-1">
-                                    <Text className="text-amber-500 font-bold">Cash on Delivery</Text>
-                                    <Text className="text-amber-500">💰</Text>
+                        {order.delivery_address && (
+                            <View className="flex-row justify-between">
+                                <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Address</Text>
+                                <Text className={`font-semibold text-right max-w-[60%] ${darkTheme ? "text-white" : "text-black"}`}>
+                                    {order.delivery_address}
+                                </Text>
+                            </View>
+                        )}
+                        {order.delivery_type && (
+                            <View className="flex-row justify-between">
+                                <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Delivery Type</Text>
+                                <Text className={`font-semibold capitalize ${darkTheme ? "text-white" : "text-black"}`}>
+                                    {order.delivery_type.replace('_', ' ')}
+                                </Text>
+                            </View>
+                        )}
+                        {order.bottle_source && (
+                            <View className="flex-row justify-between">
+                                <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Bottle Exchange</Text>
+                                <Text className={`font-semibold capitalize ${darkTheme ? "text-white" : "text-black"}`}>
+                                    {order.bottle_source.replace('_', ' ')}
+                                </Text>
+                            </View>
+                        )}
+                        <View className={`mt-1 pt-3 border-t flex-col gap-3 ${darkTheme ? "border-gray-800" : "border-gray-200"}`}>
+                            <View className="flex-row justify-between items-center">
+                                <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Payment Method</Text>
+                                {order.payment_method === "cash" ? (
+                                    <View className="flex-row items-center gap-1">
+                                        <Text className="text-amber-500 font-bold">Cash on Delivery</Text>
+                                        <Text className="text-amber-500">💰</Text>
+                                    </View>
+                                ) : order.payment_method === "card" ? (
+                                    <View className="flex-row items-center gap-1">
+                                        <Text className="text-blue-500 font-bold">Card</Text>
+                                        <Text className="text-blue-500">💳</Text>
+                                    </View>
+                                ) : (
+                                    <View className="flex-row items-center gap-1">
+                                        <Text className="text-green-500 font-bold">M-PESA</Text>
+                                        <Text className="text-green-500">📱</Text>
+                                    </View>
+                                )}
+                            </View>
+                            <View className="flex-row justify-between items-center">
+                                <Text className={`${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Payment Status</Text>
+                                <View className={`px-3 py-1 rounded-full ${order.payment_status === 'paid' ? 'bg-green-500/20' : 'bg-amber-500/20'}`}>
+                                    <Text className={`font-bold capitalize ${order.payment_status === 'paid' ? 'text-green-500' : 'text-amber-500'}`}>
+                                        {order.payment_status || "Pending"}
+                                    </Text>
                                 </View>
-                            ) : (
-                                <View className="flex-row items-center gap-1">
-                                    <Text className="text-green-500 font-bold">M-PESA</Text>
-                                    <Text className="text-green-500">✅</Text>
-                                </View>
-                            )}
+                            </View>
                         </View>
                     </View>
                 </View>
@@ -593,7 +842,8 @@ export default function OrderDetail() {
                         <Text className="text-white font-bold text-lg">⭐ Rate This Order</Text>
                     </PressableScale>
                 )}
-            </ScrollView>
+                </ScrollView>
+            </View>
 
             {/* Address Mismatch Dispute Modal */}
             <Modal
@@ -630,27 +880,39 @@ export default function OrderDetail() {
                         <View className="gap-3 mb-4">
                             <PressableScale
                                 activeOpacity={0.8}
+                                disabled={resolveLoading}
                                 onPress={() => {
-                                    // Handle Approve Charge API call
-                                    Toast.success("Charge Approved", "Your rider is on their way up!");
+                                    resolveMismatch(
+                                        { orderId: order.id, action: "approve_charge" },
+                                        {
+                                            onSuccess: () => Toast.success("Charge Approved", "Your rider is on their way up!"),
+                                            onError: (err) => Toast.error("Action Failed", err.message)
+                                        }
+                                    );
                                 }}
                                 className="w-full py-4 rounded-full items-center"
-                                style={{ backgroundColor: BRAND.primary }}
+                                style={{ backgroundColor: BRAND.primary, opacity: resolveLoading ? 0.7 : 1 }}
                             >
-                                <Text className="text-white font-bold text-lg">Approve Charge (+KSh 30)</Text>
+                                <Text className="text-white font-bold text-lg">{resolveLoading ? "Processing..." : "Approve Charge (+KSh 30)"}</Text>
                             </PressableScale>
 
                             <PressableScale
                                 activeOpacity={0.8}
+                                disabled={resolveLoading}
                                 onPress={() => {
-                                    // Handle Leave at Ground Floor API call
-                                    Toast.info("Notified Rider", "Please meet your rider at the ground floor.");
+                                    resolveMismatch(
+                                        { orderId: order.id, action: "leave_ground" },
+                                        {
+                                            onSuccess: () => Toast.info("Notified Rider", "Please meet your rider at the ground floor."),
+                                            onError: (err) => Toast.error("Action Failed", err.message)
+                                        }
+                                    );
                                 }}
                                 className="w-full py-4 rounded-full items-center"
-                                style={{ backgroundColor: darkTheme ? BRAND.gray800 : BRAND.gray200 }}
+                                style={{ backgroundColor: darkTheme ? BRAND.gray800 : BRAND.gray200, opacity: resolveLoading ? 0.7 : 1 }}
                             >
                                 <Text className={`font-bold text-lg ${darkTheme ? 'text-white' : 'text-black'}`}>
-                                    Leave at Ground Floor
+                                    {resolveLoading ? "Processing..." : "Leave at Ground Floor"}
                                 </Text>
                             </PressableScale>
                         </View>

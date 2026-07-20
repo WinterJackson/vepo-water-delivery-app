@@ -14,8 +14,8 @@ const OrderListItem = ({ data }: Props) => {
   
   if (!data) return null;
 
-  const isDelivered = data.order_status === "completed" || data.order_status === "delivered";
-  const isCancelled = data.order_status === "cancelled" || data.order_status === "failed";
+  const isDelivered = data.order_status === "delivered" || data.order_status === "completed";
+  const isCancelled = data.order_status === "cancelled" || data.order_status === "failed" || data.order_status === "rejected";
   const isPaused = data.order_status === "mismatch_pending";
   const statusColor = isDelivered ? "bg-gray-200" : (isCancelled ? "bg-red-500/20" : (isPaused ? "bg-amber-500/20" : "bg-accentbg"));
   const textColor = isDelivered ? "text-black" : (isCancelled ? "text-red-500" : (isPaused ? "text-amber-500" : "text-white"));

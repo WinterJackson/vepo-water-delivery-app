@@ -118,7 +118,8 @@ class DispatchPolicy:
             return round(fee, 2)
         else:
             # Retail pricing
+            # H-03 FIX: Use RETAIL_FLAT_FEE_KSH as the base rate instead of magic numbers
             if delivery_type == "keep_my_bottle":
-                return round(50.0 + (25.0 * distance_km), 2)
+                return round(cls.RETAIL_FLAT_FEE_KSH + 20.0 + (25.0 * distance_km), 2)
             else:
-                return round(30.0 + (15.0 * distance_km), 2)
+                return round(cls.RETAIL_FLAT_FEE_KSH + (15.0 * distance_km), 2)

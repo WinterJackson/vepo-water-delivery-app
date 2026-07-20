@@ -29,15 +29,16 @@ import { useRiderProfile } from "@/hooks/queries/useRiderData";
 import { Popup } from "@/lib/popup";
 import { useDebounce } from "@/hooks/useDebounce";
 import { RiderOrderCardSkeleton, RiderTripRadarSkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const STATUS_COLORS: Record<string, string> = {
   pending: "bg-yellow-500/20", accepted: "bg-accentbg/20",
-  picked_up: "bg-purple-500/20", in_transit: "bg-accentbg/20",
+  picked_up: "bg-purple-500/20",
   delivered: "bg-green-500/20", unassigned: "bg-orange-500/20",
 };
 const STATUS_TEXT: Record<string, string> = {
   pending: "text-yellow-600", accepted: "text-accentbg",
-  picked_up: "text-purple-600", in_transit: "text-accentbg",
+  picked_up: "text-purple-600",
   delivered: "text-green-600", unassigned: "text-orange-600",
 };
 
@@ -70,8 +71,7 @@ export default function Orders() {
     o.order_status === "pending" || 
     o.order_status === "accepted" || 
     o.order_status === "ready" || 
-    o.order_status === "picked_up" || 
-    o.order_status === "in_transit"
+    o.order_status === "picked_up"
   );
 
   // WebSocket hook for real-time order updates
@@ -267,16 +267,12 @@ export default function Orders() {
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 120, paddingTop: 10 }}
         ListEmptyComponent={
           loading ? <RiderOrderCardSkeleton /> : (
-            <View className="items-center justify-center pt-20">
-              <View className="w-24 h-24 rounded-full bg-gray-100 dark:bg-white/5 items-center justify-center mb-4">
-                  <Ionicons name={tab === "Incoming" ? "bicycle-outline" : "file-tray-outline"} size={48} color={BRAND.primary} />
-              </View>
-              <Text className={`text-lg font-bold ${darkTheme ? "text-white" : "text-gray-900"}`}>
-                 {tab === "Incoming" ? "No Incoming Deliveries" : "No Delivery History"}
-              </Text>
-              <Text className={`text-center mt-2 px-8 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-                 {tab === "Incoming" ? "You currently have no active deliveries. Wait for auto-assignment or check the Trip Radar." : "Your past completed or cancelled deliveries will appear here."}
-              </Text>
+            <View className="mt-10">
+              <EmptyState 
+                  mood={tab === "Incoming" ? "proud" : "sad"} 
+                  title={tab === "Incoming" ? "No Incoming Deliveries" : "No Delivery History"} 
+                  subtitle={tab === "Incoming" ? "You currently have no active deliveries. Wait for auto-assignment or check the Trip Radar." : "Your past completed or cancelled deliveries will appear here."} 
+              />
             </View>
           )
         }

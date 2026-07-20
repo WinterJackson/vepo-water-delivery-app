@@ -108,9 +108,21 @@ export function RiderEarningsSkeleton() {
 
     return (
         <View className="flex-1 w-full pt-6 gap-6">
-            <Skeleton width="100%" height={160} borderRadius={16} />
+            <Skeleton width="100%" height={130} borderRadius={16} />
+            
+            <View className="rounded-2xl p-4 flex-row items-center justify-between shadow-sm border" style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : '#ffffff', borderColor: isDark ? 'rgba(255, 255, 255, 0.1)' : '#e5e7eb' }}>
+                <View className="flex-row items-center gap-3">
+                    <Skeleton width={40} height={40} borderRadius={20} />
+                    <View className="gap-1.5">
+                        <SkeletonText width={160} />
+                        <SkeletonText width={120} />
+                    </View>
+                </View>
+                <Skeleton width={20} height={20} borderRadius={10} />
+            </View>
+
             <View className={`rounded-3xl p-4 shadow-sm`} style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
-                {[1, 2, 3].map((i) => (
+                {[1, 2, 3, 4].map((i) => (
                     <View key={i} className={`flex-row justify-between py-4 border-b`} style={{ borderBottomColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
                         <SkeletonText width={120} />
                         <SkeletonText width={80} />

@@ -874,7 +874,7 @@ const initialRegion: import("@/types/models").MapRegion = {
 	// Fetch active orders for Tracking
     useEffect(() => {
         if (!orders || orders.length === 0) return;
-        const active = orders.find((o: any) => o.order_status === "picked_up" || o.order_status === "in_transit");
+        const active = orders.find((o: any) => o.order_status === "picked_up");
         if (active) {
             setActiveSession(active);
         }

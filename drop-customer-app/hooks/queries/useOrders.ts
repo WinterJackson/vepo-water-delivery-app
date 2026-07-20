@@ -13,10 +13,27 @@ export interface Order {
     vehicle_class?: string;
     created_at: string;
     payment_method: string;
+    payment_status?: string;
+    delivery_address?: string;
+    delivery_time?: number;
+    delivery_type?: string;
+    bottle_source?: string;
+    customer_note?: string;
+    payload_surcharge?: number;
+    staircase_surcharge?: number;
     is_locked: boolean;
     is_rated?: boolean;
-    vendor?: { id: string; business_name: string; location_address: string; profile_pic?: string; phone_number?: string; vendor_type?: string };
-    deliverer?: { id: string; full_name: string; phone_number?: string };
+    lat?: number;
+    lng?: number;
+    lat_from?: number;
+    lng_from?: number;
+    product_subtotal?: number;
+    wallet_discount?: number;
+    welcome_discount?: number;
+    service_fee?: number;
+    surge_fee?: number;
+    vendor?: { id: string; business_name: string; location_address: string; profile_pic?: string; phone_number?: string; vendor_type?: string; lat?: number; lng?: number };
+    deliverer?: { id: string; full_name: string; phone_number?: string; vehicle_details?: string };
     order_item?: OrderItem[];
 }
 
@@ -45,11 +62,20 @@ async function cancelOrderFetch(orderId: string, token: string | null): Promise<
     if (!res.ok) throw new Error(`Cancel order failed: ${res.status}`);
 }
 
+async function resolveMismatchFetch(orderId: string, action: string, token: string | null): Promise<void> {
+    const res = await fetch(`${BASE_URL}/api/orders/${orderId}/resolve-mismatch`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+    });
+    if (!res.ok) throw new Error(`Resolve mismatch failed: ${res.status}`);
+}
+
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 export function useOrders() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery<Order[], Error>({
-        queryKey: ['customer', 'orders'],
+        queryKey: ['customer', 'orders', userId],
         queryFn: async () => {
             const token = await getToken();
             return fetchOrders(token);
@@ -76,10 +102,25 @@ export function useCancelOrder() {
     });
 }
 
-export function usePaymentHistory() {
+export function useResolveMismatch() {
     const { getToken } = useAuth();
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ orderId, action }: { orderId: string; action: string }) => {
+            const token = await getToken();
+            return resolveMismatchFetch(orderId, action, token);
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['customer', 'orders'] });
+            queryClient.invalidateQueries({ queryKey: ['customer', 'orders', 'active'] });
+        },
+    });
+}
+
+export function usePaymentHistory() {
+    const { getToken, userId } = useAuth();
     return useQuery<any[], Error>({
-        queryKey: ['customer', 'payments'],
+        queryKey: ['customer', 'payments', userId],
         queryFn: async () => {
             const token = await getToken();
             const res = await fetch(ROUTES.GET_PAYMENT_HISTORY, {
@@ -94,9 +135,9 @@ export function usePaymentHistory() {
 }
 
 export function useLastCompletedOrder() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery<Order | null, Error>({
-        queryKey: ['customer', 'orders', 'last-completed'],
+        queryKey: ['customer', 'orders', 'last-completed', userId],
         queryFn: async () => {
             const token = await getToken();
             const res = await fetch(`${BASE_URL}/api/cart/orders/last-completed`, {
@@ -112,9 +153,9 @@ export function useLastCompletedOrder() {
 }
 
 export function useActiveOrder() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery<Order | null, Error>({
-        queryKey: ['customer', 'orders', 'active'],
+        queryKey: ['customer', 'orders', 'active', userId],
         queryFn: async () => {
             const token = await getToken();
             const res = await fetch(`${BASE_URL}/api/cart/orders/active`, {
@@ -130,9 +171,9 @@ export function useActiveOrder() {
 }
 
 export function useOrderTrackingLogs(orderId: string | null) {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery<any[], Error>({
-        queryKey: ['customer', 'orders', orderId, 'tracking'],
+        queryKey: ['customer', 'orders', orderId, 'tracking', userId],
         queryFn: async () => {
             if (!orderId) return [];
             const token = await getToken();

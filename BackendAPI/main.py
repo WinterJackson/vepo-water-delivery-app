@@ -85,16 +85,28 @@ from contextlib import asynccontextmanager
 async def lifespan(app: FastAPI):
     from routes.websocket_routes import manager
     import asyncio
-    from arq.worker import Worker
+    from arq.worker import create_worker
     from worker import WorkerSettings
 
     # Start WebSocket PubSub
     await manager.start_pubsub()
 
-    # Start ARQ Worker as a background task
-    kwargs = {k: v for k, v in WorkerSettings.__dict__.items() if not k.startswith('_')}
-    arq_worker = Worker(**kwargs)
-    arq_task = asyncio.create_task(arq_worker.main())
+    # Test Redis before starting ARQ Worker
+    from core.redis_client import get_redis
+    import logging
+    r = get_redis()
+    arq_task = None
+    if r:
+        try:
+            await r.ping()
+            # Start ARQ Worker as a background task safely using create_worker
+            arq_worker = create_worker(WorkerSettings)
+            arq_task = asyncio.create_task(arq_worker.main())
+            logging.info("ARQ Background Worker initialized successfully.")
+        except Exception as e:
+            logging.warning(f"Redis not reachable. Skipping ARQ Background Worker initialization. Error: {e}")
+    else:
+        logging.warning("Redis not configured. Skipping ARQ Background Worker initialization.")
     
     yield
     
@@ -102,11 +114,12 @@ async def lifespan(app: FastAPI):
     if manager.pubsub_task:
         manager.pubsub_task.cancel()
     
-    arq_task.cancel()
-    try:
-        await arq_task
-    except asyncio.CancelledError:
-        pass
+    if arq_task:
+        arq_task.cancel()
+        try:
+            await arq_task
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(title="Drop Water Delivery API", version="1.0.0", lifespan=lifespan)
 

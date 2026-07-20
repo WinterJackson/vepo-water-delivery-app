@@ -46,7 +46,7 @@ async def process_sms_webhook(request: Request, From: str = Form(...), Body: str
         from sqlalchemy import text
         stmt_order = select(Order).where(
             Order.deliverer_id == deliverer.id,
-            Order.order_status.in_(["picked_up", "in_transit"]),
+            Order.order_status == "picked_up",
             text("CAST(id AS TEXT) LIKE :prefix")
         ).params(prefix=f"{order_suffix}%")
         result_order = await session.execute(stmt_order)

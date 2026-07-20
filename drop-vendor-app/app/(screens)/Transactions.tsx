@@ -20,6 +20,7 @@ import { UIThemeContext } from "@/context/ThemeContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import SearchBar from "@/components/common/Search";
 import { ScrollView } from "react-native-gesture-handler";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { useWalletTransactionsPaginated } from "@/hooks/queries/useWallet";
 
 const TRANSACTION_COLORS: Record<string, string> = {
@@ -192,14 +193,12 @@ export default function Transactions() {
 
       <View className="flex-1 px-4 pt-2">
         {!txLoading && filteredTransactions.length === 0 ? (
-          <View className={`flex-1 items-center justify-center p-8 rounded-3xl mb-8 mt-4 ${darkTheme ? "bg-surface-container border border-white/5" : "bg-slate-50 border border-slate-100"}`}>
-            <Ionicons name="receipt-outline" size={48} color={darkTheme ? "#475569" : "#cbd5e1"} />
-            <Text className={`mt-4 font-bold text-center ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>No transactions found</Text>
-            {searchQuery.length > 0 && (
-                <Text className={`mt-2 text-sm text-center ${darkTheme ? "text-slate-500" : "text-slate-400"}`}>
-                    Try adjusting your search query or filters.
-                </Text>
-            )}
+          <View className="mt-16">
+            <EmptyState 
+              mood="sad" 
+              title="No transactions found" 
+              subtitle={searchQuery.length > 0 ? "Try adjusting your search query or filters." : "Your transaction history will appear here."} 
+            />
           </View>
         ) : (
           <FlashList

@@ -119,7 +119,7 @@ export function useRiderTracking(orderId: string | null, enabled = true, polling
                         queryClient.invalidateQueries({ queryKey: ['customer', 'rider-location', orderId] });
                     }
                 } catch (parseErr) {
-                    if (__DEV__) console.error('[WS Tracker] Parse error:', parseErr);
+                    if (__DEV__) console.warn('[WS Tracker] Parse error:', parseErr);
                 }
             };
 
@@ -142,12 +142,12 @@ export function useRiderTracking(orderId: string | null, enabled = true, polling
             };
 
             ws.onerror = (err) => {
-                if (__DEV__) console.error('[WS Tracker] Error:', err);
+                if (__DEV__) console.warn('[WS Tracker] Error:', err);
             };
 
             wsRef.current = ws;
         } catch (e) {
-            if (__DEV__) console.error('[WS Tracker] Connection setup failed:', e);
+            if (__DEV__) console.warn('[WS Tracker] Connection setup failed:', e);
             // Immediately fall back if we can't even build the URL
             startPolling();
         }

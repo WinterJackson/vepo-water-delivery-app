@@ -16,6 +16,7 @@ import { Popup } from "@/lib/popup";
 import { BRAND } from "@/constants/brandColors";
 import { Image } from "expo-image";
 import { useVendorProfile } from "@/hooks/queries/useVendorProfile";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const RiderCard = memo(({ 
   item, 
@@ -301,16 +302,12 @@ export default function RiderManagement() {
                  ))}
               </View>
             ) : (
-              <View className="items-center justify-center pt-24">
-                <View className={`w-24 h-24 rounded-full items-center justify-center mb-6 shadow-sm border ${darkTheme ? "bg-slate-800 border-slate-700" : "bg-white border-slate-200"}`}>
-                   <Ionicons name="people" size={48} color={BRAND.primary} />
-                </View>
-                <Text className={`text-xl mt-2 font-bold ${darkTheme ? "text-white" : "text-slate-900"}`}>
-                  No {filter.toLowerCase()} riders
-                </Text>
-                <Text className={`text-sm mt-2 text-center px-10 font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>
-                  When a rider requests to join your fleet, they will appear here.
-                </Text>
+              <View className="mt-16">
+                <EmptyState 
+                  mood="sad" 
+                  title={`No ${filter.toLowerCase()} riders`}
+                  subtitle="When a rider requests to join your fleet, they will appear here." 
+                />
               </View>
             )
           }

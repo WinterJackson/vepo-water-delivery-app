@@ -4,32 +4,34 @@ import { useCancelOrder } from "@/hooks/queries/useOrders";
 import { useAuth } from "@clerk/clerk-expo";
 import { format, parseISO } from 'date-fns';
 import { useRouter } from "expo-router";
-import React, { useContext, useLayoutEffect, useState, useMemo } from "react";
+import React, { useContext, useState, useMemo } from "react";
 import { Image, Text, View } from "react-native";
 import { Toast } from "@/lib/toast";
 import { Popup } from "@/lib/popup";
 import { PressableScale } from "@/components/ui/PressableScale";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { Ionicons } from "@expo/vector-icons";
 
 type Props = {
   order: any;
 };
 
+import { Alert } from "react-native";
+
 // FIX-RERENDER-08: Extract LiveETA into its own React.memo component.
-// The 1-second interval ONLY causes re-renders inside this tiny component,
-// not the entire OrderCard or the parent list.
-const LiveETA = React.memo(({ createdAt, status }: { createdAt: string, status: string }) => {
+const LiveETA = React.memo(({ createdAt, status, deliveryTime }: { createdAt: string, status: string, deliveryTime?: number }) => {
    const [timeLeft, setTimeLeft] = useState("");
 
    React.useEffect(() => {
       if (!createdAt) return;
-      const targetTime = new Date(createdAt).getTime() + 30 * 60000; // 30 mins total SLA
+      const slaMins = deliveryTime || 30; // Use API provided time or fallback to 30 mins
+      const targetTime = new Date(createdAt).getTime() + slaMins * 60000;
       
       const updateTimer = () => {
          const now = new Date().getTime();
          const diff = targetTime - now;
          
-         if (status === "in_transit" || status === "picked_up") {
+         if (status === "picked_up") {
             setTimeLeft("5-10 mins");
             return;
          }
@@ -44,24 +46,21 @@ const LiveETA = React.memo(({ createdAt, status }: { createdAt: string, status: 
       };
 
       updateTimer();
-      // FIX-RERENDER-09: For statuses that show a static string ("5-10 mins"),
-      // don't run the interval at all — it's wasteful.
-      if (status === "in_transit" || status === "picked_up") return;
+      // FIX-RERENDER-09: For statuses that show a static string, don't run the interval.
+      if (status === "picked_up") return;
       const interval = setInterval(updateTimer, 1000);
       return () => clearInterval(interval);
-   }, [createdAt, status]);
+   }, [createdAt, status, deliveryTime]);
 
    return (
-       <View className="flex-row items-center bg-sky-500/10 px-3 py-1 rounded-full border border-sky-500/20 ml-2">
-         <Text className="text-sky-600 dark:text-sky-400 font-bold mr-1 text-xs">⏳ ETA:</Text>
+       <View className="flex-row items-center bg-sky-500/10 px-2 py-1 rounded-md border border-sky-500/20">
+         <Text className="text-sky-600 dark:text-sky-400 font-bold mr-1 text-[10px] uppercase tracking-wider">ETA</Text>
          <Text className="text-sky-600 dark:text-sky-400 font-bold text-xs">{timeLeft}</Text>
        </View>
    )
 });
 
 // FIX-RERENDER-10: Wrap entire OrderCard in React.memo.
-// FlashList passes the same `order` object reference when data hasn't changed,
-// so memo prevents re-renders from parent state changes (filter toggle, refreshing, etc.)
 const OrderCard = React.memo(({ order }: Props) => {
   const router = useRouter();
   const { userId } = useAuth();
@@ -71,16 +70,14 @@ const OrderCard = React.memo(({ order }: Props) => {
   const {currentTheme} = useContext(UIThemeContext);
 	const darkTheme = currentTheme === "dark"
 
-  // <-------------HOOKS-------------->
   const [showItems, setShowItems] = useState(false);
   const [reorderLoading, setReorderLoading] = useState(false);
 
-  // FIX-RERENDER-11: Compute action as a memoized value instead of
-  // storing in state + calling setAct() in useLayoutEffect.
-  // This eliminates an unnecessary state update on mount.
+  // FIX-RERENDER-11: Compute action as a memoized value
   const action = useMemo(() => {
-    if (order.order_status === "out for delivery") return 'Track Order';
-    if ((order.order_status === "completed" || order.order_status === "delivered") && !order.is_rated) return 'Rate Delivery';
+    // Treat picked_up and mismatch_pending as tracking states
+    if (["picked_up", "mismatch_pending", "pending_review"].includes(order.order_status)) return 'Track Order';
+    if (order.order_status === "delivered" && !order.is_rated) return 'Rate Delivery';
     if (order.order_status === "cancelled") return 'Re-Order';
     if (order.order_status === "pending" || order.order_status === "unassigned" || order.order_status === "accepted") return 'Cancel Order';
     return '';
@@ -89,39 +86,46 @@ const OrderCard = React.memo(({ order }: Props) => {
   const getStatusStyle = (status: string) => {
       const s = status.toLowerCase();
       if (s === 'delivered' || s === 'completed') return { badge: 'bg-green-500/20 border-green-500/30', text: 'text-green-500' };
-      if (s === 'in_transit' || s === 'picked_up' || s === 'out for delivery') return { badge: 'bg-blue-500/20 border-blue-500/30', text: 'text-blue-500' };
+      if (s === 'picked_up') return { badge: 'bg-blue-500/20 border-blue-500/30', text: 'text-blue-500' };
       if (s === 'cancelled' || s === 'rejected') return { badge: 'bg-red-500/20 border-red-500/30', text: 'text-red-500' };
       if (s === 'mismatch_pending') return { badge: 'bg-amber-500/20 border-amber-500/30', text: 'text-amber-600 dark:text-amber-400' };
       return { badge: 'bg-yellow-500/20 border-yellow-500/30', text: 'text-yellow-600 dark:text-yellow-400' };
   };
 
-  // Cancel order function
   const cancelOrder = (orderId: string) => {
-    cancelOrderMutation(orderId, {
-      onSuccess: () => {
-        Toast.success("Success", "Order cancelled successfully");
-      },
-      onError: (error: Error) => {
-        Toast.error("Error", (error as Error).message || "Failed to cancel order");
-      }
-    });
+    const isAccepted = order.order_status === "accepted";
+    const message = isAccepted 
+      ? "Are you sure you want to cancel this order? Since the vendor has already accepted it, a KSH 50 cancellation penalty will apply to your account."
+      : "Are you sure you want to cancel this order? This action cannot be undone.";
+      
+    Alert.alert(
+      "Cancel Order",
+      message,
+      [
+        { text: "No, Keep It", style: "cancel" },
+        {
+          text: "Yes, Cancel",
+          style: "destructive",
+          onPress: () => {
+            cancelOrderMutation(orderId, {
+              onSuccess: () => Toast.success("Success", "Order cancelled successfully"),
+              onError: (error: Error) => Toast.error("Error", (error as Error).message || "Failed to cancel order")
+            });
+          }
+        }
+      ]
+    );
   };
 
   const handleReorder = async (forceReplace = false) => {
     setReorderLoading(true);
     try {
-      // Loop over order.order_item array and add each to cart consecutively
       const items = order?.order_item || [];
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         await new Promise((resolve, reject) => {
           addToCart(
-            {
-              id: item.product_id,
-              quantity: item.quantity,
-              user_id: userId as string,
-              force_replace: i === 0 ? forceReplace : false, // Only force on first item
-            },
+            { id: item.product_id, quantity: item.quantity, user_id: userId as string, force_replace: i === 0 ? forceReplace : false },
             { onSuccess: resolve as any, onError: reject }
           );
         });
@@ -150,9 +154,9 @@ const OrderCard = React.memo(({ order }: Props) => {
     }
   };
 
-  // <-------------VARIABLES-------------->
-  // FIX-RERENDER-12: Memoize date formatting — parseISO + format are not free
+  // FIX-RERENDER-12: Memoize date formatting
   const { dateStr, timeStr } = useMemo(() => {
+    if (!order.created_at) return { dateStr: 'Unknown', timeStr: '' };
     const parsedDate = parseISO(order.created_at);
     return {
       dateStr: format(parsedDate, 'dd MMM yyyy'),
@@ -164,191 +168,223 @@ const OrderCard = React.memo(({ order }: Props) => {
     <PressableScale
       activeOpacity={0.95}
       onPress={() => router.push({ pathname: "/(screens)/OrderDetail", params: { orderId: order.id } })}
-      className="mb-3"
+      className="mb-4"
     >
-      <View className={`flex-1 gap-2 ${darkTheme?"bg-gray-200/15":"bg-white"} rounded-xl p-4 transition-all duration-300`}>
-
-      {/* DATE  AND AMOUNT */}
-      <View className="flex-row justify-between items-center gap-[50px]">
-        <View className={`flex-row gap-3`}>
-          <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Date: </Text>
-          <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{dateStr}</Text>
-        </View>
-        <View className={`flex-row gap-3`}>
-          <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Total Amt: Ksh </Text>
-          <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{order.total_amount}</Text>
-        </View>
-      </View>
-       {/* ORDER STATUS AND CUSTOMER ACTIONS */}
-       <View className={`flex-row justify-between gap-5 items-start mt-2`}>
-         <View className={`flex-row gap-3 items-center`}>
-           <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Order Status: </Text>
-           <View className={`px-3 py-1 rounded-full border border-gray-100 ${getStatusStyle(order.order_status).badge}`}>
-             <Text className={`font-bold capitalize ${getStatusStyle(order.order_status).text}`}>{order.order_status.replace('_', ' ')}</Text>
-           </View>
-           {["accepted", "preparing", "ready", "picked_up", "in_transit"].includes(order.order_status) && (
-               <LiveETA createdAt={order.created_at} status={order.order_status} />
-           )}
-         </View>
-         {!showItems && (
-           <View className="">
-             <Text className={`${darkTheme?"text-white":"text-black"} text-lg font-semibold`}>{order?.order_item?.length || 0} items</Text>
-           </View>
-         )}
-         {/* Vendor Location */}
-         {!showItems && (
-           <View className="">
-             <Text className={`${darkTheme?"text-white":"text-black"} text-lg font-semibold`}>Vendor Location: </Text>
-             <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{order.vendor?.location_address || 'Location not available'}</Text>
-           </View>
-         )}
-         {/* Customer actions */}
+      <View className={`flex-1 ${darkTheme ? "bg-[#1C1C1E]" : "bg-white"} rounded-2xl p-4 shadow-sm border ${darkTheme ? "border-white/5" : "border-gray-100"}`}>
         
-      </View>
-      <View className="flex-row justify-between items-center gap-[50px]">
-        <View className={`flex-row gap-3`}>
-          <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Payment Status: </Text>
-          <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{order.payment_status}</Text>
-        </View>
-{action != "" &&
-           <PressableScale
-             activeOpacity={0.7}
-             disabled={action === "Cancel Order" && cancelLoading}
-             onPress={() => {
-               if(action === "Rate Delivery") router.push({ pathname: "/(screens)/RateOrder", params: { orderId: order.id, vendorId: order.vendor_id, riderId: order.deliverer_id } });
-               else if(action === "Cancel Order") {
-                 // Implement cancel order functionality
-                 cancelOrder(order.id);
-               }
-             }}
-           >
-             <View className={`py-2 px-3 border rounded-lg ${darkTheme?"border-white":"border-black"}`}>
-               {action === "Cancel Order" && cancelLoading ? (
-                 <View className="flex-row items-center gap-2">
-                    <Skeleton width={16} height={16} borderRadius={8} />
-                   <Text>Cancelling...</Text>
-                 </View>
-               ) : (
-                 <Text className={darkTheme?"text-white":"text-black"}>{action}</Text>
-               )}
-             </View>
-           </PressableScale>
-         }
-      </View>
-      {/* Re-Order */}
-      {(order.order_status === "completed" || order.order_status === "delivered") && 
-        <PressableScale 
-          className=""
-          activeOpacity={0.6}
-          disabled={reorderLoading}
-          onPress={() => handleReorder()}
-        >
-          <View className={`py-3 px-4 border rounded-xl items-center flex-row justify-center gap-2 mt-2 ${darkTheme?"border-white bg-white/10":"border-black bg-white"}`}>
-            {reorderLoading ? (
-               <Skeleton width={16} height={16} borderRadius={8} />
-            ) : (
-               <Text style={{ fontSize: 20 }}>↻</Text>
-            )}
-            <Text className={`font-bold text-lg ${darkTheme?"text-white":"text-black"}`}>
-              {reorderLoading ? "Reordering..." : "Re-Order Items"}
+        {/* HEADER: Date & Total */}
+        <View className="flex-row justify-between items-start mb-3">
+          <View className="flex-1 mr-2">
+            <Text className={`text-[10px] uppercase tracking-wider font-bold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Date</Text>
+            <Text className={`text-sm font-semibold mt-0.5 ${darkTheme ? "text-white" : "text-black"}`}>{dateStr}</Text>
+          </View>
+          <View className="items-end flex-shrink-0">
+            <Text className={`text-[10px] uppercase tracking-wider font-bold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Total Amt</Text>
+            <Text className={`text-sm font-bold mt-0.5 ${darkTheme ? "text-white" : "text-black"}`}>
+              Ksh {(
+                Number((Number(order.product_subtotal) > 0 ? order.product_subtotal : order.order_item?.reduce((sum: number, item: any) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0)) || 0) +
+                Number(order.delivery_fee || 0) +
+                Number(order.service_fee || 0) +
+                Number(order.surge_fee || 0) +
+                Number(order.payload_surcharge || 0) +
+                Number(order.staircase_surcharge || 0) -
+                Number(order.welcome_discount || 0) -
+                Number(order.wallet_discount || 0)
+              ).toFixed(2)}
             </Text>
           </View>
-        </PressableScale>
-      }
-      {/* ORDER ITEMS */}
-      {showItems && (
-        <View>
-              {order?.order_item?.map((item: any, index: any) => {
-                return (
-                  <PressableScale
-                    key={index}
-                    activeOpacity={0.6}
-                  >
-                    <View
-                      className="p-2 flex-row gap-2 flex-1 rounded-xl "
-                    >
-                      {/* IMAGE  */}
-                      <View className="h-[90px] w-[90px]">
-                        <Image
-                          source={{uri: item.product.image_url}}
-                          className="w-full h-full rounded-lg"
-                        />
-                      </View>
-                      {/* ORDER ITEM DETAILS: Product-name, quantity, price per unit, Subtotal per item*/}
-                      <View className="flex-1 gap-2 justify-center ">
-                        {/* product name */}
-                        <Text className={darkTheme?"text-white":"text-black"}>{`${
-                            item.product.name.length > 30
-                              ? item.product.name.substring(0, 30).trim() + "..."
-                              : item.product.name
-                          }`}</Text>
-                        <View className="flex-row gap-5 justify-between items-end">
-                          <View className="">
-                            <View className={`flex-row gap-3`}>
-                              <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Qty: </Text>
-                              <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{item.quantity}</Text>
-                            </View>
-                            <View className={`flex-row gap-3`}>
-                              <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Price: Ksh </Text>
-                              <Text className={`text-lg  ${darkTheme?"text-white":""}`}>{item.price}</Text>
-                            </View>
-                          </View>
-                          <View className="items-end">
-                            <Text className={`text-lg font-semibold ${darkTheme?"text-white":""}`}>Subtotal</Text>
-                            <Text className={`text-lg  ${darkTheme?"text-white":""}`}>Ksh {item.Subtotal}</Text>
-                          </View>
-                        </View>
-                      </View>
-                    </View>
-                  </PressableScale>
-                );
-              })}
-              <View className="gap-1">
-              {/* Delivery Fee */}
-              <View className="flex-row gap-2 items-end">
-                <Text className={`font-semibold ${darkTheme?"text-white":"text-black"}`}>Delivery fee:</Text>
-                <Text className={darkTheme?"text-white":"text-black"}>{`Ksh ${order.delivery_fee ?? 50}`}</Text>
-              </View>
-              {/* total amount */}
-              <View className="flex-row gap-2 items-end">
-                <Text className={`font-semibold ${darkTheme?"text-white":"text-black"}`}>Total Amt:</Text>
-                <Text className={darkTheme?"text-white":"text-black"}>{`Ksh ${order.total_amount}`}</Text>
-              </View>
-            </View>
         </View>
-      )}
-      
-      {!showItems ? (
-        <>
 
-          <PressableScale
-            className=""
-            activeOpacity={0.8}
-            onPress={() => {
-              setShowItems(true);
-            }}
+        {/* STATUS & ITEMS ROW */}
+        <View className="flex-row items-center justify-between mb-3">
+          <View className="flex-row items-center flex-wrap gap-2 flex-1 mr-2">
+            <View className={`px-2 py-1 rounded-md border ${getStatusStyle(order.order_status).badge}`}>
+              <Text className={`text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(order.order_status).text}`}>
+                {order.order_status.replace('_', ' ')}
+              </Text>
+            </View>
+            {["accepted", "preparing", "ready", "picked_up", "mismatch_pending"].includes(order.order_status) && (
+               <LiveETA createdAt={order.created_at} status={order.order_status} deliveryTime={order.delivery_time} />
+            )}
+          </View>
+          <Text className={`text-xs font-semibold flex-shrink-0 ${darkTheme ? "text-gray-300" : "text-gray-600"}`}>
+            {order?.order_item?.length || 0} item{(order?.order_item?.length !== 1) ? 's' : ''}
+          </Text>
+        </View>
+
+        {/* VENDOR ROW (Only when details are hidden) */}
+        {!showItems && (
+          <View className={`p-3 rounded-xl flex-row justify-between items-center mb-3 ${darkTheme ? "bg-white/5" : "bg-gray-50"}`}>
+            <View className="flex-1">
+              <Text className={`text-[10px] uppercase tracking-wider font-bold mb-0.5 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Vendor Location</Text>
+              <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-200" : "text-gray-800"}`} numberOfLines={1}>
+                {order.vendor?.location_address || 'Location not available'}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* PAYMENT & ACTIONS */}
+        <View className="flex-row items-center justify-between">
+          <View className="flex-1 mr-2">
+            <Text className={`text-[10px] uppercase tracking-wider font-bold mb-0.5 ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Payment Status</Text>
+            <Text className={`text-xs font-bold uppercase tracking-wider ${order.payment_status === 'paid' ? 'text-green-500' : 'text-amber-500'}`}>
+              {order.payment_status}
+            </Text>
+          </View>
+          
+          {action != "" && (
+            <PressableScale
+              activeOpacity={0.7}
+              disabled={action === "Cancel Order" && cancelLoading}
+              onPress={() => {
+                if(action === "Rate Delivery") router.push({ pathname: "/(screens)/RateOrder", params: { orderId: order.id, vendorId: order.vendor_id, riderId: order.deliverer_id } });
+                else if(action === "Cancel Order") cancelOrder(order.id);
+                else if(action === "Re-Order") handleReorder();
+                else if(action === "Track Order") router.push({ pathname: "/(screens)/OrderDetail", params: { orderId: order.id } });
+              }}
+            >
+              <View className={`py-1.5 px-3 rounded-full border ${darkTheme ? "border-white/20 bg-white/5" : "border-gray-200 bg-gray-50"}`}>
+                {action === "Cancel Order" && cancelLoading ? (
+                  <View className="flex-row items-center gap-2">
+                     <Skeleton width={12} height={12} borderRadius={6} />
+                    <Text className={`text-xs font-bold ${darkTheme ? "text-gray-300" : "text-gray-700"}`}>Wait...</Text>
+                  </View>
+                ) : (
+                  <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-800"}`}>{action}</Text>
+                )}
+              </View>
+            </PressableScale>
+          )}
+        </View>
+
+        {/* RE-ORDER BUTTON */}
+        {(order.order_status === "delivered" || order.order_status === "completed" || order.order_status === "cancelled") && 
+          <PressableScale 
+            activeOpacity={0.6}
+            disabled={reorderLoading}
+            onPress={() => handleReorder()}
+            className="mt-3"
           >
-            <View className="py-3 pr-3">
-              <Text className={`text-lg font-semibold text-accentbg`}>See Order Details</Text>
+            <View className={`py-2.5 px-4 rounded-xl items-center flex-row justify-center gap-2 ${darkTheme ? "bg-sky-500/20" : "bg-sky-500/10"}`}>
+              {reorderLoading ? (
+                 <Skeleton width={14} height={14} borderRadius={7} />
+              ) : (
+                 <Text className="text-sky-500 font-bold text-lg leading-none mt-[-2px]">↻</Text>
+              )}
+              <Text className={`font-bold text-xs text-sky-500`}>
+                {reorderLoading ? "Reordering..." : "Re-Order Items"}
+              </Text>
             </View>
           </PressableScale>
-        </>
-      ) : (
-        <>
-          <PressableScale
-            className=""
-            activeOpacity={0.8}
-            onPress={() => {
-              setShowItems(false);
-            }}
-          >
-            <View className="py-3 pr-3">
-              <Text className={`text-lg font-semibold text-accentbg`}>See less...</Text>
+        }
 
+        {/* ORDER ITEMS LIST */}
+        {showItems && (
+          <View className={`mt-4 border-t pt-3 ${darkTheme ? "border-gray-800" : "border-gray-100"}`}>
+            {order?.order_item?.map((item: any, index: any) => (
+              <View key={index} className="flex-row py-2 gap-3 items-center">
+                <View className="h-12 w-12 bg-gray-100 dark:bg-gray-800 rounded-lg overflow-hidden items-center justify-center">
+                  {item.product?.image_url ? (
+                    <Image source={{ uri: item.product.image_url }} className="w-full h-full" resizeMode="cover" />
+                  ) : (
+                    <Text>📦</Text>
+                  )}
+                </View>
+                <View className="flex-1 justify-center py-0.5">
+                  <Text className={`text-xs font-bold mb-1 ${darkTheme ? "text-gray-100" : "text-gray-800"}`} numberOfLines={2}>
+                    {item.product?.name || "Product"}
+                  </Text>
+                  <View className="flex-row justify-between items-end mt-1">
+                    <Text className={`text-[10px] font-semibold uppercase tracking-wider ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
+                      Qty: {item.quantity}  •  Ksh {item.price}
+                    </Text>
+                    <Text className={`text-xs font-bold ${darkTheme ? "text-white" : "text-black"}`}>
+                      Ksh {(Number(item.quantity || 0) * Number(item.price || 0)).toFixed(2)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            <View className={`mt-2 pt-3 border-t ${darkTheme ? "border-gray-800" : "border-gray-100"} gap-1.5`}>
+              <View className="flex-row justify-between items-center">
+                <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Subtotal</Text>
+                <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-700"}`}>Ksh {Number((Number(order.product_subtotal) > 0 ? order.product_subtotal : order.order_item?.reduce((sum: number, item: any) => sum + (Number(item.quantity || 0) * Number(item.price || 0)), 0)) || 0).toFixed(2)}</Text>
+              </View>
+              <View className="flex-row justify-between items-center">
+                <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Delivery Fee</Text>
+                <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-700"}`}>Ksh {order.delivery_fee ?? 0}</Text>
+              </View>
+              {order.service_fee ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Service Fee</Text>
+                  <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-700"}`}>Ksh {order.service_fee}</Text>
+                </View>
+              ) : null}
+              {order.surge_fee ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Surge Pricing</Text>
+                  <Text className={`text-xs font-bold text-orange-500`}>Ksh {order.surge_fee}</Text>
+                </View>
+              ) : null}
+              {order.payload_surcharge ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Large Order Surcharge</Text>
+                  <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-700"}`}>Ksh {order.payload_surcharge}</Text>
+                </View>
+              ) : null}
+              {order.staircase_surcharge ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Staircase Surcharge</Text>
+                  <Text className={`text-xs font-bold ${darkTheme ? "text-gray-200" : "text-gray-700"}`}>Ksh {order.staircase_surcharge}</Text>
+                </View>
+              ) : null}
+              {order.welcome_discount ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Welcome Offer</Text>
+                  <Text className={`text-xs font-bold text-green-500`}>-Ksh {order.welcome_discount}</Text>
+                </View>
+              ) : null}
+              {order.wallet_discount ? (
+                <View className="flex-row justify-between items-center">
+                  <Text className={`text-xs font-semibold ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Wallet Applied</Text>
+                  <Text className={`text-xs font-bold text-green-500`}>-Ksh {order.wallet_discount}</Text>
+                </View>
+              ) : null}
+              <View className="flex-row justify-between items-center mt-1 pt-2 border-t border-gray-800/50 dark:border-gray-100/10">
+                <Text className={`text-sm font-bold ${darkTheme ? "text-white" : "text-black"}`}>Total Amount</Text>
+                <Text className={`text-sm font-bold text-sky-500`}>
+                  Ksh {(
+                    Number(order.product_subtotal || 0) +
+                    Number(order.delivery_fee || 0) +
+                    Number(order.service_fee || 0) +
+                    Number(order.surge_fee || 0) +
+                    Number(order.payload_surcharge || 0) +
+                    Number(order.staircase_surcharge || 0) -
+                    Number(order.welcome_discount || 0) -
+                    Number(order.wallet_discount || 0)
+                  ).toFixed(2)}
+                </Text>
+              </View>
             </View>
-          </PressableScale>
-        </>
-      )}
+          </View>
+        )}
+
+        {/* TOGGLE DETAILS */}
+        <PressableScale
+          activeOpacity={0.8}
+          onPress={() => setShowItems(!showItems)}
+          className="mt-4"
+        >
+          <View className={`py-3 px-4 rounded-xl flex-row justify-center items-center gap-2 ${darkTheme ? "bg-white/5 border border-white/10" : "bg-gray-50 border border-gray-100"}`}>
+             <Text className={`text-[11px] font-bold uppercase tracking-wider ${darkTheme ? "text-gray-300" : "text-gray-600"}`}>
+               {showItems ? "Hide Order Details" : "See Order Details"}
+             </Text>
+             <Ionicons name={showItems ? "chevron-up" : "chevron-down"} size={14} color={darkTheme ? "#d1d5db" : "#4b5563"} />
+          </View>
+        </PressableScale>
+
       </View>
     </PressableScale>
   );

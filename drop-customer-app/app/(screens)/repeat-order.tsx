@@ -155,19 +155,27 @@ export default function RepeatOrderScreen() {
                   <View className="flex-row justify-between">
                     <Text className={`${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>Subtotal</Text>
                     <Text className={`${darkTheme ? "text-on-surface" : "text-gray-800"}`}>
-                      KSH {Number(lastOrder.total_amount).toFixed(2)}
+                      KSH {Number(lastOrder.product_subtotal || lastOrder.total_amount || 0).toFixed(2)}
                     </Text>
                   </View>
                   <View className="flex-row justify-between">
                     <Text className={`${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>Delivery Fee</Text>
                     <Text className={`${darkTheme ? "text-on-surface" : "text-gray-800"}`}>
-                      KSH {Number(lastOrder.delivery_fee).toFixed(2)}
+                      KSH {Number(lastOrder.delivery_fee || 0).toFixed(2)}
                     </Text>
                   </View>
+                  {Number(lastOrder.service_fee || 0) > 0 && (
+                    <View className="flex-row justify-between">
+                      <Text className={`${darkTheme ? "text-on-surface-variant" : "text-gray-500"}`}>Service Fee</Text>
+                      <Text className={`${darkTheme ? "text-on-surface" : "text-gray-800"}`}>
+                        KSH {Number(lastOrder.service_fee).toFixed(2)}
+                      </Text>
+                    </View>
+                  )}
                   <View className={`flex-row justify-between pt-2 mt-2 border-t ${darkTheme ? "border-outline-variant/20" : "border-gray-100"}`}>
                     <Text className={`font-bold text-lg ${darkTheme ? "text-on-surface" : "text-gray-900"}`}>Total</Text>
                     <Text className={`font-bold text-lg text-primary`}>
-                      KSH {(Number(lastOrder.total_amount) + Number(lastOrder.delivery_fee)).toFixed(2)}
+                      KSH {Number(lastOrder.total_amount || 0).toFixed(2)}
                     </Text>
                   </View>
                 </GlassCard>
@@ -177,7 +185,7 @@ export default function RepeatOrderScreen() {
             {/* Bottom Actions */}
             <View className={`px-5 py-4 border-t ${darkTheme ? "bg-surface border-outline-variant/10" : "bg-white border-gray-100"}`}>
               <DropButton
-                title={isOrdering ? "Adding to Cart..." : `Repeat Order • KSH ${(Number(lastOrder.total_amount) + Number(lastOrder.delivery_fee)).toFixed(2)}`}
+                title={isOrdering ? "Adding to Cart..." : `Repeat Order • KSH ${Number(lastOrder.total_amount || 0).toFixed(2)}`}
                 onPress={handleRepeatOrder}
                 disabled={isOrdering}
               />

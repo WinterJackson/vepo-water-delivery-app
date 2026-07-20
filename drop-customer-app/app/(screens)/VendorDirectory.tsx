@@ -11,6 +11,7 @@ import { BRAND, TOAST } from '@/constants/brandColors';
 import { estimateDeliveryTime } from '@/utils/distance';
 import { useUserDetails } from '@/hooks/queries/useUser';
 import { Skeleton, SkeletonText } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import { VendorCardSkeleton } from '@/components/skeletons/ContextualSkeletons';
 import { useDebounce } from '@/hooks/useDebounce';
 import { FlashList } from '@shopify/flash-list';
@@ -208,11 +209,12 @@ export default function VendorDirectory() {
                         ))}
                     </View>
                 ) : filteredVendors.length === 0 ? (
-                    <View className="flex-1 items-center justify-center pb-20">
-                        <Text className={`text-lg font-bold ${darkTheme ? 'text-white' : 'text-gray-900'}`}>No vendors found</Text>
-                        <Text className={`text-center mt-2 ${darkTheme ? 'text-gray-400' : 'text-gray-500'}`}>
-                            Try adjusting your filters or search query
-                        </Text>
+                    <View className="flex-1 mt-10">
+                        <EmptyState 
+                            mood="sad" 
+                            title="No vendors found" 
+                            subtitle="Try adjusting your filters or search query." 
+                        />
                     </View>
                 ) : (
                     <FlashList

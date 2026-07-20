@@ -13,7 +13,7 @@ from schemas.contact_schemas import OrderContactsResponse, ContactInfo
 logger = logging.getLogger(__name__)
 
 # Contact info is only visible during active fulfillment states
-ACTIVE_ORDER_STATES = ["accepted", "assigned", "preparing", "ready", "picked_up", "in_transit", "arrived", "mismatch_pending"]
+ACTIVE_ORDER_STATES = ["accepted", "preparing", "ready", "picked_up", "pending_review", "mismatch_pending"]
 
 async def get_order_contacts(session: AsyncSession, order_id: UUID, requester_clerk_id: str) -> OrderContactsResponse:
     """

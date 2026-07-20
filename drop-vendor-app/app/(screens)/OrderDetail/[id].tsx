@@ -25,7 +25,7 @@ const STATUS_COLORS: Record<string, string> = {
   preparing: "bg-purple-500/20 border-purple-500/30",
   ready: "bg-green-500/20 border-green-500/30",
   rejected: "bg-red-500/20 border-red-500/30",
-  in_transit: "bg-sky-500/20 border-sky-500/30",
+
   picked_up: "bg-sky-500/20 border-sky-500/30",
   delivered: "bg-green-500/20 border-green-500/30",
   unassigned: "bg-slate-500/20 border-slate-500/30",
@@ -40,7 +40,7 @@ const STATUS_TEXT_COLORS: Record<string, string> = {
   preparing: "text-purple-500",
   ready: "text-green-500",
   rejected: "text-red-500",
-  in_transit: "text-sky-500",
+
   picked_up: "text-sky-500",
   delivered: "text-green-500",
   unassigned: "text-slate-500",
@@ -369,16 +369,61 @@ export default function OrderDetail() {
             <Text className={`font-bold text-lg mb-3 ${darkTheme ? "text-white" : "text-gray-900"}`}>Payment Summary</Text>
             <View className="flex-row justify-between mb-3">
               <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Subtotal</Text>
-              <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {order.total_amount - (order.delivery_fee || 0)}</Text>
+              <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {Number(order.product_subtotal || 0).toFixed(2)}</Text>
             </View>
             <View className="flex-row justify-between mb-3">
               <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Delivery Fee</Text>
-              <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {order.delivery_fee || 0}</Text>
+              <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {Number(order.delivery_fee || 0).toFixed(2)}</Text>
             </View>
-            <View className={`h-[1px] my-3 ${darkTheme ? "bg-slate-800" : "bg-white"}`} />
+            {Number(order.service_fee || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Service Fee</Text>
+                <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {Number(order.service_fee).toFixed(2)}</Text>
+              </View>
+            )}
+            {Number(order.surge_fee || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium text-orange-500`}>Surge Fee</Text>
+                <Text className={`font-bold text-orange-500`}>KSH {Number(order.surge_fee).toFixed(2)}</Text>
+              </View>
+            )}
+            {Number(order.payload_surcharge || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Payload Surcharge</Text>
+                <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {Number(order.payload_surcharge).toFixed(2)}</Text>
+              </View>
+            )}
+            {Number(order.staircase_surcharge || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Staircase Surcharge</Text>
+                <Text className={`font-bold ${darkTheme ? "text-slate-300" : "text-slate-700"}`}>KSH {Number(order.staircase_surcharge).toFixed(2)}</Text>
+              </View>
+            )}
+            {Number(order.welcome_discount || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Welcome Discount</Text>
+                <Text className="font-bold text-green-500">-KSH {Number(order.welcome_discount).toFixed(2)}</Text>
+              </View>
+            )}
+            {Number(order.wallet_discount || 0) > 0 && (
+              <View className="flex-row justify-between mb-3">
+                <Text className={`font-medium ${darkTheme ? "text-slate-400" : "text-slate-500"}`}>Wallet Applied</Text>
+                <Text className="font-bold text-green-500">-KSH {Number(order.wallet_discount).toFixed(2)}</Text>
+              </View>
+            )}
+            <View className={`h-[1px] my-3 ${darkTheme ? "bg-slate-800" : "bg-slate-100"}`} />
             <View className="flex-row justify-between items-center">
               <Text className={`font-black text-xl ${darkTheme ? "text-white" : "text-gray-900"}`}>Total</Text>
-              <Text className={`font-black text-2xl text-accentbg`}>KSH {order.total_amount}</Text>
+              <Text className={`font-black text-2xl text-accentbg`}>KSH {(
+                Number(order.product_subtotal || 0) +
+                Number(order.delivery_fee || 0) +
+                Number(order.service_fee || 0) +
+                Number(order.surge_fee || 0) +
+                Number(order.payload_surcharge || 0) +
+                Number(order.staircase_surcharge || 0) -
+                Number(order.welcome_discount || 0) -
+                Number(order.wallet_discount || 0)
+              ).toFixed(2)}</Text>
             </View>
           </View>
 
@@ -494,7 +539,7 @@ export default function OrderDetail() {
               </PressableScale>
           )}
 
-          {(order.order_status === "ready" || order.order_status === "in_transit" || order.order_status === "picked_up" || order.order_status === "delivered") && (
+          {(order.order_status === "ready" || order.order_status === "picked_up" || order.order_status === "delivered") && (
             <>
               {order.order_status === "delivered" ? (
                 <View className={`w-full py-4 rounded-[16px] items-center border ${darkTheme ? "bg-surface-container border-outline-variant" : "bg-white border-slate-100"}`}>

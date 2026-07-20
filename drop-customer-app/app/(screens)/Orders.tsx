@@ -39,7 +39,7 @@ const Orders = () => {
 		return Orders.filter((o: any) => {
 			if (selectedFilter === "All") return true;
 			if (selectedFilter === "In Transit")
-				return o.order_status === "in_transit" || o.order_status === "picked_up" || o.order_status === "mismatch_pending";
+				return o.order_status === "picked_up" || o.order_status === "mismatch_pending";
 			if (selectedFilter === "Delivered")
 				return o.order_status === "delivered";
 			if (selectedFilter === "Pending")

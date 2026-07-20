@@ -22,6 +22,7 @@ import { BRAND, TOAST } from "@/constants/brandColors";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import PressableScale from "@/components/ui/PressableScale";
 import { RiderTripRadarSkeleton } from "@/components/skeletons/ContextualSkeletons";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Toast } from "@/lib/toast";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -341,24 +342,16 @@ export default function TripRadar() {
   );
 
   const renderEmptyState = () => (
-    <View className="flex-1 items-center justify-center py-10 mt-6 px-6">
-      <View className={`w-20 h-20 rounded-full items-center justify-center mb-4 border ${darkTheme ? "bg-surface-container border-gray-800" : "bg-white border-gray-200"}`}>
-        <Ionicons 
-          name={!isOnline ? "moon-outline" : (searchQuery ? "search-outline" : "planet-outline")} 
-          size={36} 
-          color={!isOnline ? (darkTheme ? BRAND.gray500 : BRAND.gray400) : BRAND.primary} 
-        />
-      </View>
-      <Text className={`text-lg font-bold text-center mb-2 ${darkTheme ? "text-white" : "text-gray-900"}`}>
-        {!isOnline ? "You are Offline" : (searchQuery ? "No Matches Found" : "Scanning for Deliveries...")}
-      </Text>
-      <Text className={`text-sm text-center ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-        {!isOnline 
+    <View className="flex-1 mt-10">
+      <EmptyState
+        mood={!isOnline ? "sad" : (searchQuery ? "sad" : "proud")}
+        title={!isOnline ? "You are Offline" : (searchQuery ? "No Matches Found" : "Scanning for Deliveries...")}
+        subtitle={!isOnline 
           ? "Go online to start receiving Trip Radar broadcasts from nearby vendors." 
           : (searchQuery 
             ? "Try adjusting your search terms or filters to find more orders." 
             : "No unassigned orders match your criteria right now. Keep your app open to receive instant alerts.")}
-      </Text>
+      />
     </View>
   );
 

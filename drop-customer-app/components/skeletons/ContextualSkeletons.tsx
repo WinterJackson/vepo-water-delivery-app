@@ -106,15 +106,15 @@ export function SavedLocationSkeleton() {
     const isDark = currentTheme === 'dark';
 
     return (
-        <View className="flex-row items-center p-4 rounded-2xl mb-2" style={{ backgroundColor: isDark ? BRAND.bgDark : BRAND.bgLight, borderWidth: 1, borderColor: isDark ? BRAND.gray800 : BRAND.gray200 }}>
-            <Skeleton width={40} height={40} borderRadius={20} />
-            <View className="flex-1 ml-3 gap-2">
+        <View className="flex-row items-center p-4 rounded-xl mb-3" style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#ffffff', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6' }}>
+            <Skeleton width={40} height={40} borderRadius={20} className="mr-3" />
+            <View className="flex-1 gap-1.5">
+                <SkeletonText width="30%" />
+                <SkeletonText width="90%" />
                 <SkeletonText width="40%" />
-                <SkeletonText width="80%" />
             </View>
-            <View className="flex-row items-center gap-2">
-                <Skeleton width={50} height={28} borderRadius={14} />
-                <Skeleton width={32} height={32} borderRadius={16} />
+            <View className="ml-2 p-2">
+                <SkeletonText width={45} />
             </View>
         </View>
     );
@@ -400,3 +400,27 @@ export function CustomerOnboardingSkeleton() {
         </View>
     );
 }
+
+export function FavoriteVendorSkeleton() {
+    const { currentTheme } = useContext(UIThemeContext);
+    const isDark = currentTheme === 'dark';
+
+    return (
+        <View 
+            className="flex-row items-center gap-3 px-3 py-2 rounded-full mr-3"
+            style={{ 
+                backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#ffffff', 
+                borderWidth: 1, 
+                borderColor: isDark ? 'rgba(255,255,255,0.05)' : '#f3f4f6',
+                width: 140,
+                height: 56
+            }}
+        >
+            <Skeleton width={40} height={40} borderRadius={20} />
+            <View className="flex-1 justify-center">
+                <SkeletonText width="80%" />
+            </View>
+        </View>
+    );
+}
+

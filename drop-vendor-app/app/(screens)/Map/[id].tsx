@@ -64,7 +64,7 @@ export default function LiveMap() {
         const MAX_FAILURES = 5;
 
         const connect = async () => {
-            if (!activeOrder || !["in_transit", "picked_up", "accepted"].includes(activeOrder.order_status)) return;
+            if (!activeOrder || !["picked_up", "accepted"].includes(activeOrder.order_status)) return;
 
             try {
                 const { getToken } = require("@clerk/clerk-expo").useAuth ? { getToken: null } : { getToken: null };

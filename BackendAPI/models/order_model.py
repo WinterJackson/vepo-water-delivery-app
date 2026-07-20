@@ -14,6 +14,7 @@ class Order(Base):
       Index('idx_orders_customer_created', 'customer_id', 'created_at'),
       Index('idx_orders_vendor_created', 'vendor_id', 'created_at'),
       Index('idx_orders_deliverer_created', 'deliverer_id', 'created_at'),
+      Index('idx_orders_customer_status', 'customer_id', 'order_status'),
   )
   id = Column(UUID(as_uuid=True), unique=True, primary_key=True, default=uuid.uuid4, index=True)
   customer_id = Column(UUID(as_uuid=True),ForeignKey("Users.id"), index=True)
@@ -53,6 +54,11 @@ class Order(Base):
   surge_fee = Column(Numeric(10, 2), nullable=True, default=0)
   delivery_markup = Column(Numeric(10, 2), nullable=True, default=0)
   commission_lost = Column(Numeric(10, 2), nullable=True, default=0)
+  
+  # ── Discount Audit Trail (H-07 FIX) ────────────────────────────────────
+  wallet_discount = Column(Numeric(10, 2), nullable=False, default=0.0)
+  welcome_discount = Column(Numeric(10, 2), nullable=False, default=0.0)
+  product_subtotal = Column(Numeric(10, 2), nullable=False, default=0.0)
   
   # ── Rider Specific Allowances ──────────────────────────────────────────
   staircase_surcharge = Column(Numeric(10, 2), nullable=False, default=0.0)

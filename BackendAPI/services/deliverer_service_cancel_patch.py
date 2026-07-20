@@ -19,7 +19,7 @@ async def cancel_delivery(session: AsyncSession, clerk_id: str, order_id: str, r
     """
     from services.deliverer_service import get_deliverer_by_clerk_id
     from services.notification_service import create_notification
-    from services.push_notification_service import send_push_message
+    from services.expo_push_service import send_push_message
     
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
@@ -42,7 +42,7 @@ async def cancel_delivery(session: AsyncSession, clerk_id: str, order_id: str, r
             action_taken = "cancelled"
         else:
             action_taken = "unassigned"
-    elif order.order_status == "in_transit":
+    elif order.order_status == "picked_up":
         action_taken = "cancelled"
     else:
         raise HTTPException(status_code=400, detail=f"Cannot cancel order in state {order.order_status}")

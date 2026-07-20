@@ -3,9 +3,9 @@ import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 export function useCart() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery({
-        queryKey: ['cart'],
+        queryKey: ['cart', userId],
         queryFn: async () => {
             const token = await getToken();
             if (!token) return null;
@@ -21,9 +21,9 @@ export function useCart() {
 }
 
 export function useDetailedCart() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     return useQuery({
-        queryKey: ['cart', 'detailed'],
+        queryKey: ['cart', 'detailed', userId],
         queryFn: async () => {
             const token = await getToken();
             if (!token) return null;
@@ -39,7 +39,7 @@ export function useDetailedCart() {
 }
 
 export function useAddToCart() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: { id: string; quantity: number; user_id: string; force_replace?: boolean }) => {
@@ -61,25 +61,25 @@ export function useAddToCart() {
             return res.json();
         },
         onMutate: async () => {
-            await queryClient.cancelQueries({ queryKey: ['cart'] });
-            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed'] });
-            const prevCart = queryClient.getQueryData(['cart']);
-            const prevDetailed = queryClient.getQueryData(['cart', 'detailed']);
+            await queryClient.cancelQueries({ queryKey: ['cart', userId] });
+            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed', userId] });
+            const prevCart = queryClient.getQueryData(['cart', userId]);
+            const prevDetailed = queryClient.getQueryData(['cart', 'detailed', userId]);
             return { prevCart, prevDetailed };
         },
         onError: (err, payload, context) => {
-            if (context?.prevCart) queryClient.setQueryData(['cart'], context.prevCart);
-            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed'], context.prevDetailed);
+            if (context?.prevCart) queryClient.setQueryData(['cart', userId], context.prevCart);
+            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed', userId], context.prevDetailed);
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['cart'] });
-            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed'] });
+            queryClient.invalidateQueries({ queryKey: ['cart', userId] });
+            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed', userId] });
         }
     });
 }
 
 export function useChangeCartQty() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: { id: string; quantity: number }) => {
@@ -93,9 +93,9 @@ export function useChangeCartQty() {
             return res.json();
         },
         onMutate: async ({ id, quantity }) => {
-            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed'] });
-            const prevDetailed = queryClient.getQueryData(['cart', 'detailed']);
-            queryClient.setQueryData(['cart', 'detailed'], (old: any) => {
+            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed', userId] });
+            const prevDetailed = queryClient.getQueryData(['cart', 'detailed', userId]);
+            queryClient.setQueryData(['cart', 'detailed', userId], (old: any) => {
                 if (!old || !old.items) return old;
                 return {
                     ...old,
@@ -110,17 +110,17 @@ export function useChangeCartQty() {
             return { prevDetailed };
         },
         onError: (err, payload, context) => {
-            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed'], context.prevDetailed);
+            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed', userId], context.prevDetailed);
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['cart'] });
-            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed'] });
+            queryClient.invalidateQueries({ queryKey: ['cart', userId] });
+            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed', userId] });
         }
     });
 }
 
 export function useDeleteCartItem() {
-    const { getToken } = useAuth();
+    const { getToken, userId } = useAuth();
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (payload: { id: string }) => {
@@ -134,9 +134,9 @@ export function useDeleteCartItem() {
             return res.json();
         },
         onMutate: async ({ id }) => {
-            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed'] });
-            const prevDetailed = queryClient.getQueryData(['cart', 'detailed']);
-            queryClient.setQueryData(['cart', 'detailed'], (old: any) => {
+            await queryClient.cancelQueries({ queryKey: ['cart', 'detailed', userId] });
+            const prevDetailed = queryClient.getQueryData(['cart', 'detailed', userId]);
+            queryClient.setQueryData(['cart', 'detailed', userId], (old: any) => {
                 if (!old || !old.items) return old;
                 return {
                     ...old,
@@ -146,11 +146,11 @@ export function useDeleteCartItem() {
             return { prevDetailed };
         },
         onError: (err, payload, context) => {
-            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed'], context.prevDetailed);
+            if (context?.prevDetailed) queryClient.setQueryData(['cart', 'detailed', userId], context.prevDetailed);
         },
         onSettled: () => {
-            queryClient.invalidateQueries({ queryKey: ['cart'] });
-            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed'] });
+            queryClient.invalidateQueries({ queryKey: ['cart', userId] });
+            queryClient.invalidateQueries({ queryKey: ['cart', 'detailed', userId] });
         }
     });
 }
