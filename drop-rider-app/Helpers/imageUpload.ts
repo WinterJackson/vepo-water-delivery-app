@@ -31,7 +31,7 @@ const SecureUpload = async (uri: string, name: string | null | undefined, getTok
 
   try {
     const token = await getToken();
-    const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/deliverer/upload_proof`, {
+    const res = await fetch(`${process.env.EXPO_PUBLIC_BACKEND_BASE_URL}/api/rider/upload_proof`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`

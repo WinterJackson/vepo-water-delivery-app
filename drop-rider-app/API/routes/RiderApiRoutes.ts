@@ -54,15 +54,6 @@ const RiderApiRoutes = {
     path: `${BASE_URL}/api/rider/reviews`,
     method: "GET",
   } as const satisfies ApiRoute,
-  // --- Payouts ---
-  RequestPayout: {
-    path: `${BASE_URL}/api/payouts/request`,
-    method: "POST",
-  } as const satisfies ApiRoute,
-  GetPayouts: {
-    path: `${BASE_URL}/api/payouts`,
-    method: "GET",
-  } as const satisfies ApiRoute,
   // --- Wallet ---
   WalletTopUp: {
     path: `${BASE_URL}/api/wallet/top-up`,
@@ -86,15 +77,15 @@ const RiderApiRoutes = {
     method: "GET",
   } as const satisfies ApiRoute,
   MarkNotificationRead: {
-    path: `${BASE_URL}/api/notifications/read`,
+    path: `${BASE_URL}/api/notifications/read?user_type=rider`,
     method: "POST",
   } as const satisfies ApiRoute,
   MarkAllNotificationsRead: {
-    path: `${BASE_URL}/api/notifications/read-all`,
+    path: `${BASE_URL}/api/notifications/read-all?user_type=rider`,
     method: "POST",
   } as const satisfies ApiRoute,
   DeleteNotification: (id: string): ApiRoute => ({
-    path: `${BASE_URL}/api/notifications/${id}`,
+    path: `${BASE_URL}/api/notifications/${id}?user_type=rider`,
     method: "DELETE",
   }),
   // --- Order Actions ---

@@ -26,10 +26,12 @@ const ThemeContextProvider = ({ children }: Props) => {
       const value = await AsyncStorage.getItem("THEME");
       if (value !== null) {
         setCurrentTheme(value as ColorSchemeName);
+        return true;
       }
     } catch (error) {
       // Error retrieving data
     }
+    return false;
   };
 
   const setTheme = async () => {
@@ -47,18 +49,19 @@ const ThemeContextProvider = ({ children }: Props) => {
   };
 
   useEffect(() => {
-    const updateTheme = async () => {
-      setCurrentTheme(theme);
-      try {
-        if (theme) {
+    const initTheme = async () => {
+      const hasStoredTheme = await _retrieveTheme();
+      if (!hasStoredTheme && theme) {
+        setCurrentTheme(theme);
+        try {
           await AsyncStorage.setItem("THEME", theme);
+        } catch (error) {
+          // Silent fail for storage
         }
-      } catch (error) {
-        // Silent fail for storage
       }
     };
-    updateTheme();
-  }, [theme]);
+    initTheme();
+  }, []);
 
   return (
     <UIThemeContext.Provider value={{ setTheme, currentTheme }}>

@@ -1,6 +1,7 @@
 import { useAuth } from '@clerk/clerk-expo';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import RiderApiRoutes from '../../API/routes/RiderApiRoutes';
+import { saveOrdersLocal, getOrdersLocal } from '../../config/database';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface RiderOrder {
@@ -70,16 +71,29 @@ export function useRiderOrders() {
         queryFn: async () => {
             const token = await getToken();
             const route = RiderApiRoutes.GetOrders();
-            const res = await fetch(route.path, {
-                method: route.method,
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            });
-            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
-            if (!res.ok) {
-                if (res.status === 404) throw new Error("404_NOT_FOUND");
-                throw new Error(`Rider orders fetch failed: ${res.status}`);
+            try {
+                const res = await fetch(route.path, {
+                    method: route.method,
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                });
+                if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
+                if (!res.ok) {
+                    if (res.status === 404) throw new Error("404_NOT_FOUND");
+                    throw new Error(`Rider orders fetch failed: ${res.status}`);
+                }
+                const data = await res.json();
+                saveOrdersLocal(data).catch(() => {});
+                return data;
+            } catch (e: any) {
+                if (e.message === "401_UNAUTHORIZED" || e.message === "404_NOT_FOUND") {
+                    throw e;
+                }
+                const localOrders = await getOrdersLocal();
+                if (localOrders && localOrders.length > 0) {
+                    return localOrders as RiderOrder[];
+                }
+                throw e;
             }
-            return res.json();
         },
         staleTime: 1000 * 60,
         retry: (failureCount, error) => {
