@@ -55,16 +55,54 @@ export const initDB = async () => {
             );
         `);
 
-        const cols = await db.getAllAsync(`PRAGMA table_info(offline_actions)`) as any[];
-        if (cols.length > 0 && !cols.some((c: any) => c.name === 'row_id')) {
-            const legacy = await db.getAllAsync(`SELECT * FROM offline_actions`).catch(() => []) as any[];
-            await db.execAsync(`DROP TABLE offline_actions;`);
-            await db.execAsync(`CREATE TABLE offline_actions (row_id TEXT PRIMARY KEY, id TEXT, type TEXT, payload TEXT, created_at TEXT);`);
-            for (const row of legacy) {
-                await db.runAsync(
-                    `INSERT OR REPLACE INTO offline_actions (row_id, id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
-                    [`${row.id}:migrated:${row.created_at}`, row.id, row.type, row.payload, row.created_at]
+        // --- offline_actions migration ---
+        // CREATE TABLE IF NOT EXISTS only checks the table NAME, not its columns. Devices
+        // that already have this app installed have an offline_actions table from before
+        // the row_id surrogate key existed (id TEXT PRIMARY KEY only). Left alone, every
+        // queueOfflineAction() call on those devices throws "no such column: row_id",
+        // silently swallowed by its catch block — offline queueing goes dark with zero
+        // user-facing signal. Detect the old schema and migrate forward instead.
+        const existingCols = await db.getAllAsync(`PRAGMA table_info(offline_actions)`) as any[];
+        const hasRowId = existingCols.some((c: any) => c.name === 'row_id');
+
+        if (existingCols.length > 0 && !hasRowId) {
+            let legacyRows: any[] = [];
+            try {
+                legacyRows = await db.getAllAsync(`SELECT * FROM offline_actions`) as any[];
+            } catch {
+                legacyRows = [];
+            }
+
+            await db.execAsync(`DROP TABLE IF EXISTS offline_actions;`);
+            await db.execAsync(`
+                CREATE TABLE IF NOT EXISTS offline_actions (
+                    row_id TEXT PRIMARY KEY,
+                    id TEXT,
+                    type TEXT,
+                    payload TEXT,
+                    created_at TEXT
                 );
+            `);
+
+            if (legacyRows.length > 0) {
+                const migrateStmt = await db.prepareAsync(`
+                    INSERT OR REPLACE INTO offline_actions (row_id, id, type, payload, created_at)
+                    VALUES ($row_id, $id, $type, $payload, $created_at)
+                `);
+                try {
+                    for (const row of legacyRows) {
+                        await migrateStmt.executeAsync({
+                            $row_id: `${row.id}:migrated:${row.created_at || Date.now()}`,
+                            $id: row.id,
+                            $type: row.type,
+                            $payload: row.payload,
+                            $created_at: row.created_at,
+                        });
+                    }
+                } finally {
+                    await migrateStmt.finalizeAsync();
+                }
+                if (__DEV__) console.log(`[initDB] Migrated ${legacyRows.length} queued offline action(s) to new schema.`);
             }
         } else {
             await db.execAsync(`

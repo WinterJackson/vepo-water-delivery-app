@@ -70,8 +70,11 @@ export default function RiderOnboarding() {
     }, [isLoaded]);
 
     const handleSubmit = async () => {
-        if (missingFields.includes("phone_number") && (!phoneNumber || phoneNumber.length < 9)) {
-            return Toast.error("Required", "Please enter a valid phone number");
+        // The UI shows a fixed "+254" prefix and only collects the 9-digit local part
+        // (e.g. "712345678"), so validate that shape specifically.
+        const localPhoneDigits = phoneNumber.replace(/\D/g, "");
+        if (missingFields.includes("phone_number") && (!localPhoneDigits || !/^[17]\d{8}$/.test(localPhoneDigits))) {
+            return Toast.error("Required", "Please enter a valid 9-digit phone number (e.g. 712345678)");
         }
         if (missingFields.includes("ID_number") && !idNumber) {
             return Toast.error("Required", "Please enter your National ID");
@@ -91,7 +94,11 @@ export default function RiderOnboarding() {
                 profile_pic: user?.imageUrl || ""
             };
 
-            if (phoneNumber) payload.phone_number = phoneNumber;
+            // Prepend the country code the UI implies but never actually sent — the raw
+            // 9-digit string doesn't match the backend's sanitize_phone_number() rules
+            // (it only normalizes "0XXXXXXXXX" or "254XXXXXXXXX"), so it was being stored
+            // unchanged and unusable for M-Pesa payouts, SMS, and tap-to-call.
+            if (phoneNumber) payload.phone_number = `+254${localPhoneDigits}`;
             if (idNumber) payload.ID_number = idNumber;
             if (needsVehicle) {
                 payload.vehicle_type = vehicleType;
@@ -185,7 +192,7 @@ export default function RiderOnboarding() {
                                         keyboardType="phone-pad"
                                         value={phoneNumber}
                                         onChangeText={setPhoneNumber}
-                                        maxLength={10}
+                                        maxLength={9}
                                     />
                                 </View>
                             </View>
