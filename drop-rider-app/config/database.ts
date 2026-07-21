@@ -55,7 +55,8 @@ export const initDB = async () => {
             );
 
             CREATE TABLE IF NOT EXISTS offline_actions (
-                id TEXT PRIMARY KEY,
+                row_id TEXT PRIMARY KEY,
+                id TEXT,
                 type TEXT,
                 payload TEXT,
                 created_at TEXT
@@ -124,10 +125,11 @@ export const queueOfflineAction = async (id: string, type: string, payload: stri
     const db = await getDB();
     if (!db) return;
     const created_at = new Date().toISOString();
+    const row_id = `${id}:${Date.now()}`;
     try {
         await db.runAsync(
-            `INSERT OR REPLACE INTO offline_actions (id, type, payload, created_at) VALUES (?, ?, ?, ?)`,
-            [id, type, payload, created_at]
+            `INSERT OR REPLACE INTO offline_actions (row_id, id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+            [row_id, id, type, payload, created_at]
         );
     } catch (e) {
         if (__DEV__) console.warn('[queueOfflineAction] SQLite failed:', e);
@@ -151,7 +153,7 @@ export const removeQueuedAction = async (id: string) => {
     const db = await getDB();
     if (!db) return;
     try {
-        await db.runAsync(`DELETE FROM offline_actions WHERE id = ?`, [id]);
+        await db.runAsync(`DELETE FROM offline_actions WHERE row_id = ?`, [id]);
     } catch (e) {
         if (__DEV__) console.warn('[removeQueuedAction] SQLite failed:', e);
     }

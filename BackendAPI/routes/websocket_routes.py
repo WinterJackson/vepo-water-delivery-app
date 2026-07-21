@@ -361,6 +361,8 @@ async def orders_ws(websocket: WebSocket, entity_type: str, entity_id: str, toke
                     message = json.loads(data)
                     if message.get("action") == "join-entity-room":
                         pass
+                    elif message.get("action") == "location_update" and entity_type == "rider":
+                        await manager.update_rider_location(entity_id, message)
                 except json.JSONDecodeError as e:
                     logger.warning(f"WebSocket JSON decode error from {entity_type} {entity_id}: {e}", exc_info=True)
                     await websocket.send_json({"error": "invalid_payload", "message": "Failed to parse JSON"})

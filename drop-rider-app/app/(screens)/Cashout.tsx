@@ -106,7 +106,7 @@ export default function Cashout() {
         phoneNumber: phoneNumber,
         userType: "rider",
       });
-      Alert.alert("Withdrawal Successful", "Funds have been disbursed to your M-Pesa number.");
+      Alert.alert("Withdrawal requested", "You'll get an M-Pesa confirmation shortly.");
       setWithdrawAmount("");
       setIsWithdrawModalVisible(false);
     } catch (err: any) {

@@ -36,12 +36,38 @@ export function useNetworkQueue() {
                             });
 
                             if (res.ok) {
-                                await removeQueuedAction(action.id);
-                                if (__DEV__) console.log(`Successfully flushed queued action: ${action.id}`);
+                                await removeQueuedAction(action.row_id);
+                                if (__DEV__) console.log(`Successfully flushed queued action: ${action.row_id}`);
                                 queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
                             } else if (res.status === 400 || res.status === 404 || res.status === 409) {
-                                await removeQueuedAction(action.id);
-                                if (__DEV__) console.log(`Dropped invalid queued action: ${action.id} due to ${res.status}`);
+                                await removeQueuedAction(action.row_id);
+                                const err = await res.json().catch(() => ({}));
+                                import('@/lib/toast').then(({ Toast }) => {
+                                    Toast.error("Sync Failed", err.detail || "A queued delivery update was rejected by the server.");
+                                });
+                                if (__DEV__) console.log(`Dropped invalid queued action: ${action.row_id} due to ${res.status}`);
+                            }
+                        } else if (action.type === "REJECT_BOTTLE") {
+                            const res = await fetch(`${BASE_URL}/api/rider/orders/${action.id}/bottle-rejection`, {
+                                method: 'POST',
+                                headers: {
+                                    Authorization: `Bearer ${token}`,
+                                    "Content-Type": "application/json"
+                                },
+                                body: JSON.stringify(payload)
+                            });
+
+                            if (res.ok) {
+                                await removeQueuedAction(action.row_id);
+                                if (__DEV__) console.log(`Successfully flushed queued action: ${action.row_id}`);
+                                queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
+                            } else if (res.status === 400 || res.status === 404 || res.status === 409) {
+                                await removeQueuedAction(action.row_id);
+                                const err = await res.json().catch(() => ({}));
+                                import('@/lib/toast').then(({ Toast }) => {
+                                    Toast.error("Sync Failed", err.detail || "A queued bottle rejection was rejected by the server.");
+                                });
+                                if (__DEV__) console.log(`Dropped invalid queued action: ${action.row_id} due to ${res.status}`);
                             }
                         }
                     } catch (e) {

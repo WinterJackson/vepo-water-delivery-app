@@ -10,8 +10,8 @@ const SecureUpload = async (uri: string, name: string | null | undefined, getTok
   try {
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
-      [],
-      { compress: 0.8, format: ImageManipulator.SaveFormat.WEBP }
+      [{ resize: { width: 800 } }],
+      { compress: 0.7, format: ImageManipulator.SaveFormat.WEBP }
     );
     processedUri = manipResult.uri;
   } catch (e) {

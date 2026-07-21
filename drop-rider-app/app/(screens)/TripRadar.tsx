@@ -189,7 +189,12 @@ export default function TripRadar() {
           return;
         }
         const err = await res.json().catch(() => ({}));
-        Toast.error("Claimed", err.detail || "This order was already taken by another rider.");
+        let title = "Claimed";
+        if (res.status === 402) title = "Insufficient Balance";
+        else if (res.status === 403) title = "Not Allowed";
+        else if (res.status === 409) title = "Claimed";
+        else title = "Error";
+        Toast.error(title, err.detail || "This order was already taken by another rider.");
         fetchRadarOrders();
       }
     } catch (e) {
@@ -207,6 +212,8 @@ export default function TripRadar() {
       return;
     }
     fetchRadarOrders();
+    const interval = setInterval(fetchRadarOrders, 30000);
+    return () => clearInterval(interval);
   }, [isOnline, fetchRadarOrders]);
 
   const onRefresh = useCallback(async () => {
@@ -272,10 +279,10 @@ export default function TripRadar() {
               <View className="flex-row items-center gap-1 mt-0.5">
                 <View style={{
                   width: 6, height: 6, borderRadius: 3,
-                  backgroundColor: isOnline ? TOAST.success : BRAND.favorite
+                  backgroundColor: !connected && isOnline ? BRAND.favorite : (isOnline ? TOAST.success : BRAND.favorite)
                 }} />
                 <Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>
-                  {isOnline ? "Online & Scanning" : "Offline"}
+                  {!connected && isOnline ? "Reconnecting..." : (isOnline ? "Online & Scanning" : "Offline")}
                 </Text>
               </View>
             </View>

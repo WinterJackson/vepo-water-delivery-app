@@ -251,6 +251,7 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
         order.proof_url = proof_url
         
     customer = await session.get(User, order.customer_id)
+    vendor = await session.get(Vendor, order.vendor_id)
         
     # --- Delivery Completion Logic ---
     if new_status == "delivered":
@@ -259,7 +260,6 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
         # --- Cash Order Float Deduction ---
         if order.payment_method == "cash":
             order.payment_status = "paid"
-            vendor = await session.get(Vendor, order.vendor_id)
             if vendor:
                 if vendor.vendor_type and vendor.vendor_type.value == "wholesale_b2b":
                     # For wholesale, the vendor's in-house rider collected the cash.
@@ -273,7 +273,6 @@ async def update_delivery_status(session: AsyncSession, clerk_id: str, order_id:
                     vendor.wallet_balance = float(vendor.wallet_balance or 0) + float(order.vendor_net or 0)
         elif order.payment_method == "mpesa" and order.payment_status == "paid":
             # --- M-Pesa Order Crediting ---
-            vendor = await session.get(Vendor, order.vendor_id)
             if vendor:
                 vendor.wallet_balance = float(vendor.wallet_balance or 0) + float(order.vendor_net or 0)
             # Rider only gets commission if they are a gig worker (retail)

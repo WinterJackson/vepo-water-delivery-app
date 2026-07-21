@@ -9,6 +9,7 @@ import RiderApiRoutes from "@/API/routes/RiderApiRoutes";
 import * as ImagePicker from "expo-image-picker";
 import SecureUpload from "@/Helpers/imageUpload";
 import { Toast } from "@/lib/toast";
+import { queueOfflineAction } from "@/config/database";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { BRAND, TOAST } from "@/constants/brandColors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -72,12 +73,12 @@ export default function BottleRejection() {
     }
 
     setIsSubmitting(true);
+    let uploadedUrls: string[] = [];
     try {
       const token = await getToken();
 
       // Upload photos securely to S3 first
       Toast.info("Uploading...", "Uploading evidence photos...");
-      const uploadedUrls: string[] = [];
       for (let i = 0; i < photos.length; i++) {
          const uploadResult = await SecureUpload(photos[i], `reject_${orderId}_${i}`, getToken);
          if (uploadResult?.secure_url) {
@@ -108,7 +109,18 @@ export default function BottleRejection() {
         Toast.error("Error", errData.detail || "Submission failed");
       }
     } catch (e: unknown) {
-       Toast.error("Error", (e as Error).message || "Network Error");
+       // Check if photos uploaded but backend request failed
+       if ((e as Error).message !== "Failed to upload all required photos. Please try again.") {
+           try {
+               await queueOfflineAction(orderId, "REJECT_BOTTLE", JSON.stringify({ reason_text: reason, photo_urls: uploadedUrls }));
+               Toast.success("Saved Offline", "Network error. The bottle rejection has been saved and will sync automatically when online.");
+               router.back();
+           } catch (queueErr) {
+               Toast.error("Error", (e as Error).message || "Network Error");
+           }
+       } else {
+           Toast.error("Error", (e as Error).message || "Network Error");
+       }
     } finally {
        setIsSubmitting(false);
     }
