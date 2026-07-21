@@ -190,6 +190,7 @@ export function useRiderProfile() {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
             if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
+            if (res.status === 403) throw new Error("403_FORBIDDEN");
             if (!res.ok) {
                 if (res.status === 404) throw new Error("404_NOT_FOUND");
                 throw new Error(`Profile fetch failed: ${res.status}`);
@@ -198,7 +199,8 @@ export function useRiderProfile() {
         },
         staleTime: 1000 * 60 * 2,
         retry: (failureCount, error) => {
-            if ((error as Error).message === "404_NOT_FOUND" || (error as Error).message === "401_UNAUTHORIZED") return false;
+            const msg = (error as Error).message;
+            if (msg === "404_NOT_FOUND" || msg === "401_UNAUTHORIZED" || msg === "403_FORBIDDEN") return false;
             return failureCount < 3;
         }
     });

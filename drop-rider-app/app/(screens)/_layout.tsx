@@ -27,18 +27,23 @@ export default function ScreensLayout() {
   usePushNotifications('rider');
 
   // Fetch KYC & Operational Status globally for layout gating
-  const { data: statusData, isLoading: statusLoading } = useQuery({
+  const { data: statusData, isLoading: statusLoading, isError, error } = useQuery({
     queryKey: ['rider', 'kyc_status'],
     queryFn: async () => {
       const token = await getToken();
       const res = await fetch(process.env.EXPO_PUBLIC_BACKEND_BASE_URL + "/api/deliverer/kyc/status", {
         headers: { Authorization: `Bearer ${token}` }
       });
+      if (res.status === 403) throw new Error("403_FORBIDDEN");
       if (!res.ok) throw new Error("Failed to fetch status");
       return res.json();
     },
     enabled: !!isSignedIn,
     staleTime: 60000, // 1 minute
+    retry: (failureCount, error) => {
+        if ((error as Error).message === "403_FORBIDDEN") return false;
+        return failureCount < 3;
+    }
   });
 
   const active = (pathname: string) => {
@@ -47,6 +52,11 @@ export default function ScreensLayout() {
 
   if (isSignedIn === false) {
     return <Redirect href={'/(Auth)'} />
+  }
+
+  // If KYC fails with 403, rider is not registered at all.
+  if (isError && (error as Error).message === "403_FORBIDDEN") {
+    return <Redirect href={'/(Auth)/Onboarding' as any} />
   }
 
   // Force redirection to VerificationWall if unsubmitted/pending/rejected

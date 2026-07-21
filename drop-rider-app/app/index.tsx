@@ -43,8 +43,8 @@ export default function Index() {
           setReadyToRoute("onboarding");
         }
       } catch (e) {
-        // Fallback to main screens if network fails, don't trap the user
-        setReadyToRoute("main");
+        // Fallback to onboarding if network fails or unregistered
+        setReadyToRoute("onboarding");
       } finally {
         clearTimeout(timeoutId);
         setIsVerifyingProfile(false);
