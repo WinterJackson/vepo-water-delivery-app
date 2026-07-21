@@ -188,7 +188,7 @@ async def get_trip_radar_orders(session: AsyncSession, clerk_id: str):
     deliverer = await get_deliverer_by_clerk_id(session, clerk_id)
     if not deliverer:
         raise HTTPException(status_code=404, detail="Rider not found")
-    if deliverer.lat is None or deliverer.lng is None:
+    if deliverer.current_lat is None or deliverer.current_lng is None:
         raise HTTPException(status_code=400, detail="Enable location sharing to see nearby orders.")
 
     from geopy.distance import geodesic
@@ -207,7 +207,7 @@ async def get_trip_radar_orders(session: AsyncSession, clerk_id: str):
     result = await session.execute(query)
     orders = result.unique().scalars().all()
 
-    rider_point = (deliverer.lat, deliverer.lng)
+    rider_point = (deliverer.current_lat, deliverer.current_lng)
     enriched = []
     for order in orders:
         if order.vendor and order.vendor.lat is not None and order.vendor.lng is not None:

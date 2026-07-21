@@ -55,7 +55,7 @@ class Vendor(Base):
   push_token = Column(String, nullable=True)
   staff_push_token = Column(String, nullable=True)  # Separate push token for staff member
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
-  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
+  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
   
   # relationship
   # cart = relationship("Cart", back_populates="vendor")

@@ -1,7 +1,9 @@
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
 from datetime import time
-from typing import List
+from typing import List, Optional, Any
+from pydantic import field_validator
+from utils.s3_utils import generate_presigned_url
 
 class BaseUser(BaseModel):
     clerk_id: str | None = None
@@ -9,6 +11,13 @@ class BaseUser(BaseModel):
     email : str 
     phone_number : str | None = None
     profile_pic : str | None = None
+    
+    @field_validator('profile_pic', mode='after')
+    @classmethod
+    def secure_urls(cls, v: str | None) -> str | None:
+        if v and not v.startswith('http') and not v.startswith('/api/uploads/'):
+            return generate_presigned_url(v)
+        return v
     
     model_config = {"from_attributes": True}
 
@@ -35,6 +44,13 @@ class CustomerPublicProfile(BaseModel):
     floor_level: int | None = 0
     has_elevator: bool | None = False
     profile_pic : str | None = None
+
+    @field_validator('profile_pic', mode='after')
+    @classmethod
+    def secure_urls(cls, v: str | None) -> str | None:
+        if v and not v.startswith('http') and not v.startswith('/api/uploads/'):
+            return generate_presigned_url(v)
+        return v
 
     model_config = {"from_attributes": True}
 

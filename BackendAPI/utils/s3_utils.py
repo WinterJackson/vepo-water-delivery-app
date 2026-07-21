@@ -4,6 +4,7 @@ from botocore.exceptions import NoCredentialsError, ClientError
 from fastapi import UploadFile
 import uuid
 import mimetypes
+from fastapi import HTTPException
 
 import logging
 
@@ -23,15 +24,15 @@ S3_BUCKET_NAME = os.getenv('S3_BUCKET_NAME', 'drop-kyc-bucket')
 
 async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
     """
-    Securely uploads a file to AWS S3 and returns the public or presigned URL.
-    In a real-world scenario with highly sensitive KYC documents, you would 
-    return a non-public S3 key and generate presigned URLs for viewing, 
-    but for this implementation we will return the S3 key and assume the 
-    frontend/backend handles access securely.
+    Securely uploads a file to AWS S3 and returns the S3 key.
+    Enforces a strict 8MB memory cap on file reads.
     """
     try:
-        # Read the file
-        file_content = await file.read()
+        # Enforce 8MB limit (8 * 1024 * 1024 bytes)
+        MAX_SIZE = 8 * 1024 * 1024
+        file_content = await file.read(MAX_SIZE + 1)
+        if len(file_content) > MAX_SIZE:
+            raise HTTPException(status_code=413, detail="File too large. Maximum size is 8MB.")
         
         # Determine content type and extension
         content_type = file.content_type
@@ -41,8 +42,6 @@ async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
         file_name = f"{prefix}/{uuid.uuid4()}{extension}"
         
         # Upload to S3
-        # If AWS keys aren't set up yet, this will fail. We will fallback to local storage
-        # for development purposes so the app doesn't break.
         if os.getenv('AWS_ACCESS_KEY_ID'):
             s3_client.put_object(
                 Bucket=S3_BUCKET_NAME,
@@ -52,8 +51,8 @@ async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
                 # Server-side encryption for PII compliance
                 ServerSideEncryption='AES256' 
             )
-            # Return the secure key or a constructed URL
-            return f"https://{S3_BUCKET_NAME}.s3.{os.getenv('AWS_REGION', 'us-east-1')}.amazonaws.com/{file_name}"
+            # Return the secure key instead of a public URL
+            return file_name
             
         else:
             # DEVELOPMENT FALLBACK: Local file storage
@@ -73,3 +72,28 @@ async def upload_file_to_s3(file: UploadFile, prefix: str = "kyc") -> str:
     finally:
         # Reset file cursor for subsequent reads if needed
         await file.seek(0)
+
+def generate_presigned_url(s3_key: str, expires_in: int = 900) -> str:
+    """
+    Generates a presigned URL for secure access to a private S3 object.
+    Defaults to a 15 minute (900s) expiration.
+    """
+    if not s3_key:
+        return None
+        
+    if not os.getenv('AWS_ACCESS_KEY_ID'):
+        # Fallback for development if using local storage paths
+        if s3_key.startswith("/api/uploads/"):
+            return s3_key
+        return f"/api/uploads/{s3_key}"
+
+    try:
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': S3_BUCKET_NAME, 'Key': s3_key},
+            ExpiresIn=expires_in
+        )
+        return url
+    except ClientError as e:
+        logger.error(f"Error generating presigned URL: {e}", exc_info=True)
+        return None

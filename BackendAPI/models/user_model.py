@@ -56,7 +56,7 @@ class User(Base):
   payment_methods = Column(JSONB, nullable=False, server_default='[]')
 
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
-  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
+  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
   
   # relationships
   cart = relationship("Cart", back_populates="user")

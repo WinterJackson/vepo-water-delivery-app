@@ -1,6 +1,8 @@
 from pydantic import BaseModel, EmailStr
 from uuid import UUID
-from typing import Literal, Optional
+from typing import Literal, Optional, Any
+from pydantic import field_validator
+from utils.s3_utils import generate_presigned_url
 
 class CreateDeliverer(BaseModel):
     clerk_id: str
@@ -40,5 +42,11 @@ class DelivererProfileResponse(BaseModel):
     is_platinum: bool | None = None
     rating: float | None = None
     acceptance_rate: float | None = None
+    @field_validator('profile_pic', 'driver_license', mode='after')
+    @classmethod
+    def secure_urls(cls, v: str | None) -> str | None:
+        if v and not v.startswith('http') and not v.startswith('/api/uploads/'):
+            return generate_presigned_url(v)
+        return v
 
     model_config = {"from_attributes": True}

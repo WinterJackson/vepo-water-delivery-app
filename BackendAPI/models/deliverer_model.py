@@ -67,7 +67,7 @@ class Deliverer(Base):
   shift_end = Column(Time, default=time(19,0), nullable=False, index=True)
   push_token = Column(String(255), nullable=True)
   created_at= Column(TIMESTAMP(timezone=True), server_default=func.now())
-  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=datetime.now(timezone.utc))
+  updated_at= Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
   
   # relationships
   order = relationship("Order", back_populates="deliverer")

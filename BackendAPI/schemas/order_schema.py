@@ -4,8 +4,10 @@ from decimal import Decimal
 from schemas.user_schemas import CustomerPublicProfile
 from schemas.vendor_schemas import BaseVendor
 from schemas.product_schemas import ProductFull, OrderProductDetail
-from typing import List, Optional
+from typing import List, Optional, Any
 from datetime import datetime
+from pydantic import field_validator
+from utils.s3_utils import generate_presigned_url
 
 
 class OrderItemBase(BaseModel):
@@ -95,6 +97,13 @@ class BaseOrder(BaseModel):
 
   created_at: datetime
   updated_at: datetime | None = None
+
+  @field_validator('proof_url', mode='after')
+  @classmethod
+  def secure_proof_url(cls, v: str | None) -> str | None:
+      if v and not v.startswith('http') and not v.startswith('/api/uploads/'):
+          return generate_presigned_url(v)
+      return v
 
   model_config = {"from_attributes": True}
 
