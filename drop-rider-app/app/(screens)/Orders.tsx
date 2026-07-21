@@ -66,10 +66,11 @@ export default function Orders() {
      o.id && o.id.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const historyOrders = filteredOrders.filter((o: any) => o.order_status === "delivered" || o.order_status === "cancelled");
+  const historyOrders = filteredOrders.filter((o: any) => o.order_status === "delivered" || o.order_status === "cancelled" || o.order_status === "rejected");
   const incomingOrders = filteredOrders.filter((o: any) => 
     o.order_status === "pending" || 
     o.order_status === "accepted" || 
+    o.order_status === "preparing" ||
     o.order_status === "ready" || 
     o.order_status === "picked_up" ||
     o.order_status === "mismatch_pending" ||

@@ -350,7 +350,7 @@ export default function DiscoverVendors() {
                 {vendors.map((vendor: any) => (
                   <Marker
                     key={vendor.id}
-                    coordinate={{ latitude: vendor.lat, longitude: vendor.lng }}
+                    coordinate={{ latitude: Number(vendor.lat), longitude: Number(vendor.lng) }}
                     title={vendor.business_name}
                     description={`${vendor.distance_km} KM away`}
                     pinColor={vendor.status === 'approved' ? '#10b981' : vendor.status === 'pending' ? '#f59e0b' : '#0295f7'}
