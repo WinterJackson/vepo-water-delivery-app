@@ -365,12 +365,20 @@ export default function ActiveDelivery() {
           const proofUrl = uploadResult?.secure_url || null;
           updateDeliveryStatus("delivered", proofUrl);
         } catch (uploadErr) {
-          // Upload failed but still mark delivered — the Toast already fired inside the helper
+          if (emptiesReceived < computedEmptiesExpected) {
+            Toast.error("Proof Required", "Photo upload failed, but proof is mandatory for missing bottles. Please check your connection and try again.");
+            return;
+          }
+          // No deficit — safe to complete without photo
           updateDeliveryStatus("delivered");
         }
       }
     } catch (e) {
        if (__DEV__) console.error("Image picker error:", e);
+       if (emptiesReceived < computedEmptiesExpected) {
+         Toast.error("Proof Required", "Camera error occurred, but proof is mandatory for missing bottles. Please try again.");
+         return;
+       }
        updateDeliveryStatus("delivered");
     }
   };

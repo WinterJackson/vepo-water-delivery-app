@@ -11,7 +11,6 @@ export interface RiderOrder {
     delivery_address: string;
     customer?: { full_name: string; phone_number: string };
     vendor?: { business_name: string; location_address: string; lat?: number; lng?: number };
-    items?: { id: string; quantity: number; product?: { name: string } }[];
     order_item?: { id: string; quantity: number; product?: { name: string } }[];
     rider_net?: number;
     rider_commission?: number;
@@ -218,35 +217,19 @@ export function useAcceptOrder() {
                 headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
             });
             if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
-            if (!res.ok) throw new Error(`Accept order failed: ${res.status}`);
+            if (!res.ok) {
+                const errorData = await res.json().catch(() => ({}));
+                throw new Error(errorData.detail || "This order was already taken by another rider.");
+            }
             return res.json();
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
             queryClient.invalidateQueries({ queryKey: ['rider', 'trip_radar'] });
         },
-    });
-}
-
-export function useCompleteDelivery() {
-    const { getToken, signOut } = useAuth();
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (orderId: string) => {
-            const token = await getToken();
-            const route = RiderApiRoutes.UpdateDeliveryStatus(orderId);
-            const res = await fetch(`${route.path}`, {
-                method: route.method,
-                headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: 'delivered' }),
-            });
-            if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
-            if (!res.ok) throw new Error(`Complete delivery failed: ${res.status}`);
-            return res.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['rider', 'orders'] });
-            queryClient.invalidateQueries({ queryKey: ['rider', 'earnings'] });
+        onError: () => {
+            // Immediately refresh the radar so the stale/claimed card disappears
+            queryClient.invalidateQueries({ queryKey: ['rider', 'trip_radar'] });
         },
     });
 }

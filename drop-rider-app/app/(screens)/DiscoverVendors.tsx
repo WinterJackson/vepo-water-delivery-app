@@ -103,6 +103,8 @@ export default function DiscoverVendors() {
       if (res.ok) {
         const data = await res.json();
         setVendors(data);
+      } else {
+        Toast.error("Error", "Could not load nearby vendors. Pull to refresh to try again.");
       }
     } catch (e) {
       if (__DEV__) console.error(e);
