@@ -1,10 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, text
+from sqlalchemy import func, text, select
 from dependencies.dependencies import get_db
 from models.order_model import Order
 from models.payout_model import Payout
+from models.deliverer_model import Deliverer, KYCStatus
 from utils.verify_user_token import get_current_user
+from utils.s3_utils import generate_presigned_url
+from services.notification_service import create_notification
+from pydantic import BaseModel
+from typing import Literal, Optional
+from uuid import UUID
 import os
 from datetime import datetime, timedelta, timezone
 
@@ -89,3 +95,48 @@ async def get_pending_payouts(
         }
         for r in rows
     ]
+
+@router.get("/riders/pending-kyc")
+async def list_pending_kyc(session: AsyncSession = Depends(get_db), admin=Depends(require_admin)):
+    result = await session.execute(
+        select(Deliverer).where(Deliverer.kyc_status == KYCStatus.pending)
+    )
+    riders = result.scalars().all()
+    return [
+        {
+            "id": str(r.id),
+            "full_name": r.full_name,
+            "phone_number": r.phone_number,
+            "vehicle_type": r.vehicle_type,
+            "plate_number": r.plate_number,
+            "id_card_front": generate_presigned_url(r.id_card_front) if r.id_card_front else None,
+            "id_card_back": generate_presigned_url(r.id_card_back) if r.id_card_back else None,
+            "driver_license": generate_presigned_url(r.driver_license) if r.driver_license else None,
+        }
+        for r in riders
+    ]
+
+class KYCReviewRequest(BaseModel):
+    status: Literal["approved", "rejected"]
+    rejection_reason: Optional[str] = None
+
+@router.put("/riders/{rider_id}/kyc")
+async def review_rider_kyc(
+    rider_id: UUID,
+    body: KYCReviewRequest,
+    session: AsyncSession = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    deliverer = await session.get(Deliverer, rider_id)
+    if not deliverer:
+        raise HTTPException(status_code=404, detail="Rider not found")
+    deliverer.kyc_status = KYCStatus.approved if body.status == "approved" else KYCStatus.rejected
+    await session.commit()
+    await create_notification(
+        session=session, user_id=deliverer.id, user_type="rider",
+        title="KYC Approved ✅" if body.status == "approved" else "KYC Rejected",
+        message="You're verified and can go online now." if body.status == "approved"
+                else (body.rejection_reason or "Please re-check and resubmit your documents."),
+        message_type="kyc_status", action_url="/(screens)/VerificationWall",
+    )
+    return {"kyc_status": deliverer.kyc_status}

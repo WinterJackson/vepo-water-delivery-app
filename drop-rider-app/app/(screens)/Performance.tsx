@@ -117,7 +117,7 @@ export default function Performance() {
               <Ionicons name="cash-outline" size={24} color={TOAST.success} />
               <View className="flex-1">
                 <Text className={`font-bold text-base ${darkTheme ? "text-white" : "text-black"}`}>Flat Commission</Text>
-                <Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Drop Service Fee is a flat 10% on all deliveries.</Text>
+                <Text className={`text-xs ${darkTheme ? "text-gray-400" : "text-gray-500"}`}>Drop Service Fee is a flat {isPlatinum ? '7%' : '10%'} on all deliveries.</Text>
               </View>
             </View>
 

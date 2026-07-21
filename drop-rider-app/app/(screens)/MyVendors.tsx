@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from "react";
-import { View, Text, StatusBar, FlatList, RefreshControl, Image, TouchableOpacity, ActivityIndicator, TextInput } from "react-native";
+import { View, Text, StatusBar, FlatList, RefreshControl, Image, TouchableOpacity, ActivityIndicator, TextInput, Linking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { UIThemeContext } from "@/context/ThemeContext";
 import { useAuth } from "@clerk/clerk-expo";
@@ -174,9 +174,16 @@ export default function MyVendors() {
         
         {item.status === "approved" && (
           <TouchableOpacity
+            onPress={() => {
+              if (item.phone_number) {
+                Linking.openURL(`tel:${item.phone_number}`);
+              } else {
+                Toast.error("No Phone", "This vendor has no phone number listed.");
+              }
+            }}
             className={`mt-4 py-3 rounded-xl flex-row justify-center items-center ${darkTheme ? "bg-gray-800" : "bg-white"}`}
           >
-            <Ionicons name="chatbubble-ellipses-outline" size={16} color={BRAND.primary} />
+            <Ionicons name="call-outline" size={16} color={BRAND.primary} />
             <Text className={`font-semibold ml-2 ${darkTheme ? "text-white" : "text-black"}`}>Contact Vendor</Text>
           </TouchableOpacity>
         )}

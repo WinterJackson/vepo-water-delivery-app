@@ -29,7 +29,8 @@ import {
     ScrollView,
     StatusBar,
     Text,
-    View
+    View,
+    ActivityIndicator
 } from "react-native";
 import { useWarmUpBrowser } from "../_layout";
 import { PressableScale } from "@/components/ui/PressableScale";
@@ -359,10 +360,11 @@ export default function SignIn() {
 					</ScrollView>
 				</KeyboardAvoidingView>
 
-				<Modal visible={AuthLoading} backdropColor={"transparent"}>
-					<View className="flex-1 items-center justify-center">
-						<View className={""}>
-							<Ionicons name="sync" size={24} color={BRAND.primary} />
+				<Modal visible={AuthLoading} transparent={true} animationType="fade">
+					<View className="flex-1 items-center justify-center bg-black/50">
+						<View className="bg-white p-6 rounded-2xl items-center shadow-xl">
+							<ActivityIndicator size="large" color={BRAND.primary} />
+							<Text className="mt-4 font-semibold text-gray-700">Loading...</Text>
 						</View>
 					</View>
 				</Modal>

@@ -46,6 +46,7 @@ interface RadarOrder {
   payment_method: "cash" | "mpesa";
   vehicle_class: string;
   vendor?: {
+    id: string;
     business_name: string;
     location_address?: string;
   };
@@ -100,7 +101,7 @@ export default function TripRadar() {
         const raw = await res.json();
         const orders: RadarOrder[] = Array.isArray(raw) ? raw : [];
         const filtered = orders.filter(
-          (o) => !mutedVendors.includes(o.vendor?.business_name || "")
+          (o) => !mutedVendors.includes(o.vendor?.id || "")
         );
         setRadarOrders(filtered);
       } else if (res.status === 401) {
@@ -122,8 +123,8 @@ export default function TripRadar() {
       const newOrderId = updateData.order_id;
       if (!newOrderId) return;
       
-      const vendorName = updateData.vendor?.business_name || "";
-      if (mutedVendors.includes(vendorName)) return;
+      const vendorId = updateData.vendor?.id || "";
+      if (mutedVendors.includes(vendorId)) return;
 
       setRadarOrders((prev) => {
         const exists = prev.some((o) => o.id === newOrderId);
@@ -152,12 +153,17 @@ export default function TripRadar() {
         };
         return [newOrder, ...prev];
       });
+    } else if (updateData.action === "TRIP_RADAR_RETRACT") {
+      const retractedId = updateData.order_id;
+      setRadarOrders((prev) => prev.filter((o) => o.id !== retractedId));
     } else if (updateData.action === "trip_radar_claimed") {
       setRadarOrders((prev) => prev.filter((o) => o.id !== updateData.order_id));
       if (selectedOrder?.id === updateData.order_id) {
         bottomSheetRef.current?.close();
         Toast.error("Claimed", "This order was taken by another rider.");
       }
+    } else if (updateData.action === "ORDER_OFFER_BROADCAST") {
+      fetchRadarOrders();
     }
   });
 

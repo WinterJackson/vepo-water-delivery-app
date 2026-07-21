@@ -387,7 +387,16 @@ async def dispatch_order_to_riders(
 
     # ── TIER 1: Pre-Approved Vendor Riders ──────────────────────────────
     try:
+        from sqlalchemy.orm import selectinload
         async with get_db_session() as session:
+            order_res = await session.execute(
+                select(Order).options(selectinload(Order.vendor)).where(Order.id == order_id)
+            )
+            order = order_res.scalar_one_or_none()
+            if not order or not order.vendor:
+                logger.error(f"Dispatch Tier 1: Order {order_id} or vendor not found")
+                return
+
             # Fetch up to 10 pre-approved riders for this vendor with matching vehicle type
             tier1_query = (
                 select(Deliverer, Deliverer.push_token, Deliverer.id.label("user_id"))
@@ -445,6 +454,21 @@ async def dispatch_order_to_riders(
                             "weight_kg": total_weight_kg,
                             "quantity": total_quantity,
                             "delivery_type": delivery_type,
+                            "vendor": {
+                                "id": str(order.vendor.id),
+                                "business_name": order.vendor.business_name,
+                                "location_address": order.vendor.location_address,
+                                "lat": order.vendor.lat,
+                                "lng": order.vendor.lng,
+                            },
+                            "payment_method": order.payment_method,
+                            "vendor_net": float(order.vendor_net or 0),
+                            "platform_total": float(order.platform_total or 0),
+                            "distance_km": order.distance_km,
+                            "lat_from": order.lat_from,
+                            "lng_from": order.lng_from,
+                            "lat": order.lat,
+                            "lng": order.lng,
                         }
                     )
                 except Exception as e:
@@ -465,13 +489,17 @@ async def dispatch_order_to_riders(
         return
 
     try:
+        from sqlalchemy.orm import selectinload
         async with get_db_session() as session:
             # Re-check order status — someone may have accepted during the 20s window
-            order_check = await session.get(Order, order_id)
-            if not order_check:
+            order_check = await session.execute(
+                select(Order).options(selectinload(Order.vendor)).where(Order.id == order_id)
+            )
+            order = order_check.scalar_one_or_none()
+            if not order or not order.vendor:
                 logger.warning(f"Dispatch Tier 2: Order {order_id} not found, aborting.")
                 return
-            if order_check.order_status != "unassigned" or order_check.deliverer_id is not None:
+            if order.order_status != "unassigned" or order.deliverer_id is not None:
                 logger.info(f"Dispatch Tier 2: Order {order_id} already claimed. Skipping broadcast.")
                 return
 
@@ -522,6 +550,21 @@ async def dispatch_order_to_riders(
                             "weight_kg": total_weight_kg,
                             "quantity": total_quantity,
                             "delivery_type": delivery_type,
+                            "vendor": {
+                                "id": str(order.vendor.id),
+                                "business_name": order.vendor.business_name,
+                                "location_address": order.vendor.location_address,
+                                "lat": order.vendor.lat,
+                                "lng": order.vendor.lng,
+                            },
+                            "payment_method": order.payment_method,
+                            "vendor_net": float(order.vendor_net or 0),
+                            "platform_total": float(order.platform_total or 0),
+                            "distance_km": order.distance_km,
+                            "lat_from": order.lat_from,
+                            "lng_from": order.lng_from,
+                            "lat": order.lat,
+                            "lng": order.lng,
                         }
                     )
                 except Exception as e:
@@ -1132,14 +1175,14 @@ async def reassign_unassigned_orders(session: AsyncSession):
         reassigned_count += 1
 
         # BUG-08 FIX: Push-notify the newly assigned rider with order details
-        title = "New Delivery Assignment! 📦"
+        title = "New Delivery Nearby! 📦"
         body = (
             f"Ksh {order.delivery_fee or 0:.0f} fee | "
             f"{order.delivery_type or 'quick_swap'} | "
             f"{order.distance_km or 0:.1f}km | "
-            f"{order.vehicle_class or 'motorbike'}. Tap to start."
+            f"{order.vehicle_class or 'motorbike'}. Tap to view and accept."
         )
-        action_url = "/(screens)/ActiveDelivery"
+        action_url = "/(screens)/TripRadar"
         await create_notification(
             session=session,
             user_id=deliverer.id,

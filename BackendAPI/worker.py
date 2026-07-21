@@ -49,11 +49,23 @@ async def auto_resolve_bottle_rejections_task(ctx):
     await run_auto_resolve_bottle_rejections()
     return "Swept bottle rejections"
 
+async def auto_cancel_pending_orders_task(ctx):
+    from jobs.auto_cancel_pending_orders import run_auto_cancel_orders
+    await run_auto_cancel_orders()
+    return "Auto-cancelled pending orders"
+
+async def evaluate_platinum_riders_task(ctx):
+    from jobs.rider_tier_job import evaluate_platinum_riders
+    await evaluate_platinum_riders()
+    return "Evaluated platinum riders"
+
 class WorkerSettings:
     functions = [
         send_push_message_task,
         flush_gps_tracking_logs_task,
         auto_resolve_bottle_rejections_task,
+        auto_cancel_pending_orders_task,
+        evaluate_platinum_riders_task,
     ]
     redis_settings = redis_settings
     on_startup = startup
@@ -67,4 +79,6 @@ from arq.cron import cron
 WorkerSettings.cron_jobs = [
     cron(flush_gps_tracking_logs_task, second=set(range(0, 60, 10))), # Runs every 10 seconds
     cron(auto_resolve_bottle_rejections_task, second=0),  # runs every minute; picks up anything past the 3-minute cutoff
+    cron(auto_cancel_pending_orders_task, minute=set(range(0, 60, 5))),  # runs every 5 minutes
+    cron(evaluate_platinum_riders_task, hour=0, minute=0),  # runs daily at midnight
 ]

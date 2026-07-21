@@ -121,6 +121,7 @@ async def get_registered_vendors(
             "address": vendor.location_address,
             "profile_pic": vendor.profile_pic,
             "status": reg.status,
+            "phone_number": vendor.phone_number,
             "created_at": reg.requested_at.isoformat() if reg.requested_at else None
         })
         
@@ -135,6 +136,7 @@ async def get_registered_vendors(
                 "address": employer_vendor.location_address,
                 "profile_pic": employer_vendor.profile_pic,
                 "status": "approved",
+                "phone_number": employer_vendor.phone_number,
                 "created_at": None
             })
             

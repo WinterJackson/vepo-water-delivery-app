@@ -12,6 +12,7 @@ import {
     StatusBar,
     Text,
     View,
+    ActivityIndicator
 } from "react-native";
 import { BRAND } from "@/constants/brandColors";
 import { Ionicons } from "@expo/vector-icons";
@@ -70,10 +71,10 @@ const Layout = () => {
         }}
         />
         {/* loading modal */}
-        <Modal visible={AuthLoading}>
-					<View className="items-center">
-						<View className={""}>
-							<Ionicons name="sync" size={24} color={BRAND.primary} />
+        <Modal visible={AuthLoading} transparent={true} animationType="fade">
+					<View className="flex-1 items-center justify-center bg-black/50">
+						<View className="bg-white p-6 rounded-2xl items-center shadow-xl">
+							<ActivityIndicator size="large" color={BRAND.primary} />
 						</View>
 					</View>
 				</Modal>
