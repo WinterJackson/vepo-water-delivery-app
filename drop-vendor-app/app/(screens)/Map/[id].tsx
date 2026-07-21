@@ -200,7 +200,7 @@ export default function LiveMap() {
                         {riderCoordinates && (
                             <MarkerAnimated 
                                 ref={trackingMarkerRef}
-                                coordinate={{ latitude: riderCoordinates.lat, longitude: riderCoordinates.lng }}
+                                coordinate={{ latitude: Number(riderCoordinates.lat), longitude: Number(riderCoordinates.lng) }}
                             >
                                 <View className="items-center w-[50px] h-[50px] justify-center">
                                     <Ionicons name="bicycle" size={28} color="#f59e0b" />

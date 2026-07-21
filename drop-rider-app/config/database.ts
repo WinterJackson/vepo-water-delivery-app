@@ -53,15 +53,30 @@ export const initDB = async () => {
                 delivery_fee REAL,
                 updated_at TEXT
             );
-
-            CREATE TABLE IF NOT EXISTS offline_actions (
-                row_id TEXT PRIMARY KEY,
-                id TEXT,
-                type TEXT,
-                payload TEXT,
-                created_at TEXT
-            );
         `);
+
+        const cols = await db.getAllAsync(`PRAGMA table_info(offline_actions)`) as any[];
+        if (cols.length > 0 && !cols.some((c: any) => c.name === 'row_id')) {
+            const legacy = await db.getAllAsync(`SELECT * FROM offline_actions`).catch(() => []) as any[];
+            await db.execAsync(`DROP TABLE offline_actions;`);
+            await db.execAsync(`CREATE TABLE offline_actions (row_id TEXT PRIMARY KEY, id TEXT, type TEXT, payload TEXT, created_at TEXT);`);
+            for (const row of legacy) {
+                await db.runAsync(
+                    `INSERT OR REPLACE INTO offline_actions (row_id, id, type, payload, created_at) VALUES (?, ?, ?, ?, ?)`,
+                    [`${row.id}:migrated:${row.created_at}`, row.id, row.type, row.payload, row.created_at]
+                );
+            }
+        } else {
+            await db.execAsync(`
+                CREATE TABLE IF NOT EXISTS offline_actions (
+                    row_id TEXT PRIMARY KEY,
+                    id TEXT,
+                    type TEXT,
+                    payload TEXT,
+                    created_at TEXT
+                );
+            `);
+        }
     } catch (e: unknown) {
         if (__DEV__ && !(e as Error)?.message?.includes('NullPointerException')) {
             console.warn('[initDB] SQLite init failed (non-fatal):', e);
