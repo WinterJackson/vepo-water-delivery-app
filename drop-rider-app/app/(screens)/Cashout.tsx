@@ -234,7 +234,7 @@ export default function Cashout() {
         <View className="flex-row justify-between mb-8">
           <PressableScale 
             onPress={() => {
-              setPhoneNumber(rider?.phone_number || "");
+              setPhoneNumber(rider?.payment_methods?.find((pm: any) => pm.isDefault)?.phone || rider?.phone_number || "");
               setIsWithdrawModalVisible(true);
             }}
             className={`flex-1 mr-2 p-4 rounded-3xl items-center justify-center border ${darkTheme ? "bg-surface-container border-transparent" : "bg-white border-gray-100"}`}
@@ -248,7 +248,7 @@ export default function Cashout() {
 
           <PressableScale 
             onPress={() => {
-              setPhoneNumber(rider?.phone_number || "");
+              setPhoneNumber(rider?.payment_methods?.find((pm: any) => pm.isDefault)?.phone || rider?.phone_number || "");
               setIsTopUpModalVisible(true);
             }}
             className={`flex-1 ml-2 p-4 rounded-3xl items-center justify-center border ${darkTheme ? "bg-surface-container border-transparent" : "bg-white border-gray-100"}`}

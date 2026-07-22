@@ -38,10 +38,19 @@ const TRANSACTION_ICONS: Record<string, string> = {
   refund: "refresh-circle",
 };
 
+const TRANSACTION_ICON_HEX: Record<string, string> = {
+  top_up: "#2563eb",
+  withdrawal: "#ea580c",
+  order_payment: "#16a34a",
+  commission_deduction: "#dc2626",
+  refund: "#9333ea",
+};
+
 const TransactionItem = memo(({ item, darkTheme }: any) => {
   const isPositive = ["top_up", "order_payment", "refund"].includes(item.transaction_type);
   const colorClass = TRANSACTION_COLORS[item.transaction_type] || "bg-slate-500/20 text-slate-600";
-  const [bgColor, textColor] = colorClass.split(" ");
+  const [bgColor] = colorClass.split(" ");
+  const iconColor = TRANSACTION_ICON_HEX[item.transaction_type] || "#64748b";
   const iconName = TRANSACTION_ICONS[item.transaction_type] || "list";
 
   return (
@@ -52,7 +61,7 @@ const TransactionItem = memo(({ item, darkTheme }: any) => {
       <View className="flex-row justify-between items-center mb-3">
         <View className="flex-row items-center flex-1 pr-4">
           <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${bgColor}`}>
-            <Ionicons name={iconName as any} size={20} color={textColor.replace("text-", "").replace("-600", "Color")} style={darkTheme ? { opacity: 0.8 } : {}} />
+            <Ionicons name={iconName as any} size={20} color={iconColor} style={darkTheme ? { opacity: 0.8 } : {}} />
           </View>
           <View>
             <Text className={`font-bold text-base capitalize ${darkTheme ? "text-white" : "text-slate-900"}`}>

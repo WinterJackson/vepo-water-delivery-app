@@ -109,9 +109,8 @@ export default function SignIn() {
 				await setActive({ session: signInAttempt.createdSessionId });
 				success = true
 			} else {
-				// If the status isn't complete, check why. User might need to
-				// complete further steps.
-				// if (__DEV__) console.error(JSON.stringify(signInAttempt, null, 2));
+				if (__DEV__) console.warn("Sign-in incomplete, status:", signInAttempt.status);
+				setErrors([{ code: "incomplete", message: "incomplete", longMessage: "Additional verification is required to sign in. Please check your email or contact support." } as ClerkAPIError]);
 				success = false
 			}
 		} catch (err) {

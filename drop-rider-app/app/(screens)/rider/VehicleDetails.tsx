@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BackButtonMinimal from "@/components/ui/BackButtonMinimal";
 import { TouchableOpacity } from "react-native";
@@ -25,6 +25,13 @@ export default function VehicleDetails() {
     const [plateNo, setPlateNo] = useState(profile?.plate_number || "");
     const [vehicleType, setVehicleType] = useState(profile?.vehicle_type || "");
     const [isSaving, setIsSaving] = useState(false);
+
+    useEffect(() => {
+        if (profile) {
+            setPlateNo(profile.plate_number || "");
+            setVehicleType(profile.vehicle_type || "");
+        }
+    }, [profile]);
 
     const handleSave = async () => {
         setIsSaving(true);
