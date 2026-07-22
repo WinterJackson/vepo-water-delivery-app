@@ -2,6 +2,7 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 import { ERROR_BOUNDARY, BRAND } from '@/constants/brandColors';
 import { UIThemeContext } from '@/context/ThemeContext';
+import { captureError } from '@/utils/sentry';
 
 const ErrorFallbackUI = ({ error, resetCount, maxResets, onReset }: any) => {
   const { currentTheme } = React.useContext(UIThemeContext);
@@ -56,11 +57,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('[FATAL_CRASH] Caught error:', (error as Error).message, info.componentStack);
-    if (__DEV__) {
-      // Dev only actions if necessary
+    if (!__DEV__) {
+      captureError(error, { componentStack: info.componentStack });
     }
-    // TODO: In production, report to Sentry/Crashlytics:
-    // Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
   }
 
   handleReset = () => {

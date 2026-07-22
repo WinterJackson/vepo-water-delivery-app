@@ -224,7 +224,7 @@ export default function Dashboard() {
 
   // Find the active order (if any)
   const activeOrder = orders.find(o => 
-    !['delivered', 'cancelled'].includes(o.order_status)
+    !['delivered', 'cancelled', 'rejected'].includes(o.order_status)
   );
 
   const QuickActionCard = ({ title, subtitle, icon, route }: { title: string, subtitle: string, icon: keyof typeof Ionicons.glyphMap, route: string }) => (

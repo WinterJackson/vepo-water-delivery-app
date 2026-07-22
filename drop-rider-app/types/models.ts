@@ -48,8 +48,9 @@ export interface Product {
 }
 
 export type OrderStatus = 
-  | "pending" | "confirmed" | "preparing" | "ready" 
-  | "picked_up" | "delivered" | "cancelled";
+  | "unassigned" | "pending" | "accepted" | "preparing" | "ready" 
+  | "picked_up" | "delivered" | "cancelled" | "rejected"
+  | "pending_review" | "mismatch_pending";
 
 export interface OrderItem {
   id: string;
