@@ -42,6 +42,8 @@ class DelivererProfileResponse(BaseModel):
     is_platinum: bool | None = None
     rating: float | None = None
     acceptance_rate: float | None = None
+    employer_vendor_id: UUID | None = None
+    wallet_balance: float | None = 0.0
     @field_validator('profile_pic', 'driver_license', mode='after')
     @classmethod
     def secure_urls(cls, v: str | None) -> str | None:

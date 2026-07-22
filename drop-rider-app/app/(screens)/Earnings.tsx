@@ -104,7 +104,7 @@ export default function Earnings() {
             </PressableScale>
 
             <View className={`rounded-3xl p-4 shadow-sm ${darkTheme ? "bg-white/5" : "bg-white"}`}>
-              <StatRow label="Rider Name" value={profile?.full_name || "Rider"} />
+              <StatRow label="Rider Name" value={profile?.name || "Rider"} />
               <StatRow label="Total Deliveries" value={earnings?.total_deliveries || 0} />
               
               {/* Highlighted Bonuses */}
