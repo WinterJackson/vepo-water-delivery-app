@@ -66,8 +66,12 @@ export default function TripRadarList({ orders, isLoading }: TripRadarListProps)
         showToast('success', 'Order Accepted!', 'Navigate to the vendor to pick it up.');
         router.push("/(screens)/ActiveDelivery" as any);
       },
-      onError: (err) => {
-        showToast('error', 'Failed to accept', (err as Error).message);
+      onError: (err: any) => {
+        let title = "Failed to accept";
+        if (err.status === 402) title = "Insufficient Balance";
+        else if (err.status === 403) title = "Not Allowed";
+        else if (err.status === 409) title = "Claimed";
+        showToast('error', title, err.message || "This order was already taken by another rider.");
       }
     });
   };

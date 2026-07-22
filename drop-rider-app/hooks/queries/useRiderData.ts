@@ -218,8 +218,11 @@ export function useAcceptOrder() {
             });
             if (res.status === 401) { await signOut(); throw new Error("401_UNAUTHORIZED"); }
             if (!res.ok) {
-                const errorData = await res.json().catch(() => ({}));
-                throw new Error(errorData.detail || "This order was already taken by another rider.");
+                const err = await res.json().catch(() => ({} as any));
+                const error: any = new Error(err.detail || `Accept order failed: ${res.status}`);
+                error.status = res.status;
+                error.detail = err.detail;
+                throw error;
             }
             return res.json();
         },
